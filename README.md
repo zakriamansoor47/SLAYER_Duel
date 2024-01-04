@@ -2,7 +2,7 @@
 # Donate: If you like my work, you can donate to me via [Steam Trade Offer](https://bit.ly/3qDpgPd)
 
 ## Description:
-This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. The main feature is that you can your own Custom Duel Mode from JSON file Easily.
+This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. The main feature is that you can your own **Custom Duel Mode** from **JSON** file Easily.
 
 ## Installation:
 **1.** Upload files to your server.
