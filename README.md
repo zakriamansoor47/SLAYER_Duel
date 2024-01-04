@@ -20,7 +20,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **4.** This Plugin Draw a **Green Laser Beam** Between Players to find each other if they are Far from each other.
 
-**5.** What to do with the players when the timer expires? 0 - Nothing, 1 - Kill both, 2 - Kill a random player, 3 - Kill the one with less health (if none of them given any damage then kill both).
+**5.** You can set Duel Draw Punishment
 
 **6.** You can set players health, armor, speed, gravity.
 
