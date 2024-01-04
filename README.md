@@ -50,9 +50,9 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
   "Duel_Modes": [
     // Example Duel Mode
     //{
-    //  "Weapons": "weapon_awp,weapon_knife",                       // Weapons with Players Fight. (Seperate Commands with ',')
-    //  "CMD": "sv_autobunnyhopping 0",                             // Execute Commands on Duel Start. (Seperate Commands with ',')
-    //  "CMD_End": "sv_autobunnyhopping 1,sv_autobunnyhopping 1",   // Execute Commands on Duel End. (Seperate Commands with ',')
+    //  "Weapons": "weapon_awp,weapon_knife",                       // Weapons with Players Fight. (Separate Weapons with ',')
+    //  "CMD": "sv_autobunnyhopping 0",                             // Execute Commands on Duel Start. (Separate Commands with ',')
+    //  "CMD_End": "sv_autobunnyhopping 1,sv_autobunnyhopping 1",   // Execute Commands on Duel End. (Separate Commands with ',')
     //  "Health": 100,                                              // Health of the Players?
     //  "Armor": 100,                                               // Armor of the Players? No Helmet will be given
     //  "Helmet": 0,                                                // 0 = No Helmet, 1 = Helmet + 100 Armor
@@ -61,7 +61,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
     //  "NoZoom": true,                                             // Enable Noscope Only? (true = Yes, false = No)
     //  "OnlyHeadshot": true,                                       // Enable Headshot Only? (true = Yes, false = No)
     //  "BulletTracers": true,                                      // Show Bullet Tracers? (true = Yes, false = No)
-    //  "Name": "Awp+Noscope"                                       // Duel Mode Name
+    //  "Name": "Awp+Noscope"                                       // Duel Mode Name (Required)
     //},
     {
       "Weapons": "weapon_knife",
