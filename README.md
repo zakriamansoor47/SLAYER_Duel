@@ -32,6 +32,11 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **10.** You can Enable/Disable Bullet Tracers in Duel Mode.
 
+## TO DO:
+**1.** Add the ability to Create Custom Teleport Points.
+
+**2.** Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)
+
 ## Configuration:
 ```
 {
