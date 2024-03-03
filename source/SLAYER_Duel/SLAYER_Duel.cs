@@ -1,13 +1,17 @@
-﻿using CounterStrikeSharp.API;
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Modules.Admin;
+using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Menu;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Drawing;
 using Microsoft.Extensions.Logging;
-using CounterStrikeSharp.API.Modules.Menu;
+
 
 namespace SLAYER_Duel;
 // Used these to remove compile warnings
@@ -15,6 +19,7 @@ namespace SLAYER_Duel;
 #pragma warning disable CS8602
 #pragma warning disable CS8603
 #pragma warning disable CS8604
+#pragma warning disable CS8619
 
 public class SLAYER_DuelConfig : BasePluginConfig
 {
@@ -25,6 +30,8 @@ public class SLAYER_DuelConfig : BasePluginConfig
     [JsonPropertyName("Duel_PrepTime")] public int Duel_PrepTime { get; set; } = 3;
     [JsonPropertyName("Duel_MinPlayers")] public int Duel_MinPlayers { get; set; } = 3;
     [JsonPropertyName("Duel_DrawPunish")] public int Duel_DrawPunish { get; set; } = 3;
+    [JsonPropertyName("Duel_Beacon")] public bool Duel_Beacon { get; set; } = true;
+    [JsonPropertyName("Duel_Teleport")] public bool Duel_Teleport { get; set; } = true;
     [JsonPropertyName("Duel_Modes")] public List<DuelModeSettings> Duel_Modes { get; set; } = new List<DuelModeSettings>();
 }
 public class DuelModeSettings
@@ -53,7 +60,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.0";
+    public override string ModuleVersion => "1.2";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -70,9 +77,10 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     {
         return Config.Duel_Modes.FirstOrDefault(mode => comparer.Equals(mode.Name, modeName));
     }
-    // Create a Dictionary to store weapons for each player by player steam id
+    // Create a Dictionary to store weapons for each player by player id
     Dictionary<string, List<string>> playerSavedWeapons = new Dictionary<string, List<string>>();
     List<int> LastDuelNums = new List<int>();
+    Dictionary<string, Dictionary<string, string>> Duel_Positions = new Dictionary<string, Dictionary<string, string>>();
     public bool[] g_Zoom = new bool[64];
     public bool g_DuelStarted = false;
     public bool g_PrepDuel = false;
@@ -90,8 +98,10 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     // Timers
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_PrepDuel;
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_DuelTimer;
+    CounterStrikeSharp.API.Modules.Timers.Timer[]? PlayerBeaconTimer = new CounterStrikeSharp.API.Modules.Timers.Timer[64];
     public override void Load(bool hotReload)
     {
+        RegisterListener<Listeners.OnMapStart>(OnMapStart);
         RegisterListener<Listeners.OnTick>(() =>
         {
             if(!Config.PluginEnabled)return;
@@ -179,7 +189,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 if(g_DuelStarted)player.RemoveWeapons();
                 totalplayers++;
             }
-            if(Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1) // 1vs1 Situation
+            CCSGameRules gamerules = GetGameRules();
+            if(Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1 && !gamerules.WarmupPeriod) // 1vs1 Situation and its not warmup
             {
                 g_IsDuelPossible = true;
                 if(Config.Duel_ForceStart) // If Force Start Duel is true
@@ -190,9 +201,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 else // if force start duel is false
                 {
                     PlayersDuelVoteOption[0] = false; PlayersDuelVoteOption[1] = false;
-                    var DuelVote = new ChatMenu($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Vote {ChatColors.Darkred}★{ChatColors.Gold}]");
+                    var DuelVote = new ChatMenu($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Vote {ChatColors.DarkRed}★{ChatColors.Gold}]");
                     DuelVote.AddMenuOption($" {ChatColors.Green}Accept", AcceptDuelVoteOption);
-                    DuelVote.AddMenuOption($"{ChatColors.Darkred}Decline", DeclineDuelVoteOption);
+                    DuelVote.AddMenuOption($"{ChatColors.DarkRed}Decline", DeclineDuelVoteOption);
                     foreach (var player in Utilities.GetPlayers().Where(player => player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
                     {
                         if(player.IsBot)
@@ -200,7 +211,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                             if(player.TeamNum == 2)PlayersDuelVoteOption[0] = true;
                             else if(player.TeamNum == 3)PlayersDuelVoteOption[1] = true;
                         }
-                        else ChatMenus.OpenMenu(player, DuelVote);
+                        else MenuManager.OpenChatMenu(player, DuelVote);
                     }
                     
                 }
@@ -219,16 +230,16 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if(player.TeamNum == 2)
         {
             PlayersDuelVoteOption[0] = true;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
         }
         else if(player.TeamNum == 3)
         {
             PlayersDuelVoteOption[1] = true;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
         }
         if(PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1])
         {
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
             g_PrepDuel = true;
             PrepDuel();
         }
@@ -240,16 +251,16 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if(player.TeamNum == 2)
         {
             PlayersDuelVoteOption[0] = false;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
         }
         else if(player.TeamNum == 3)
         {
             PlayersDuelVoteOption[1] = false;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
         }
         if(!PlayersDuelVoteOption[0] && !PlayersDuelVoteOption[1])
         {
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.Darkred}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.DarkRed}Rejected {ChatColors.Gold}to Duel!");
         }
     }
     public void RemoveAllWeaponsFromMap()
@@ -274,9 +285,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             {
                 var SelectedModeName = Config.Duel_Modes.ElementAt(SelectedMode);
                 SelectedDuelModeName = SelectedModeName.Name;
-                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.Darkred}-----------------------------------------------------------------------");
-                Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Darkred}Duel Started: {ChatColors.Green} {SelectedModeName.Name}");
-                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.Darkred}-----------------------------------------------------------------------");
+                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+                Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.DarkRed}Duel Started: {ChatColors.Green} {SelectedModeName.Name}");
+                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
                 StartDuel(SelectedModeName.Name);
                 g_PrepDuel = false;
                 g_DuelStarted = true;
@@ -305,12 +316,27 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         mp_death_drop_gun_value = mp_death_drop_gun.GetPrimitiveValue<int>();
         foreach (var player in Utilities.GetPlayers().Where(player => player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
         {
+            if(Config.Duel_Teleport)TeleportPlayer(player);
             SavePlayerWeapons(player); // first save player weapons
             player.RemoveWeapons(); // then remove weapons from player
+            if(Config.Duel_Beacon) // If Beacon Enabled
+            {
+                if(PlayerBeaconTimer[player.Slot] != null){PlayerBeaconTimer[player.Slot].Kill();} // Kill Timer if running
+                // Start Beacon
+                PlayerBeaconTimer[player.Slot] = AddTimer(1.0f, ()=>
+                {
+                    if(!player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE || !g_DuelStarted && !g_PrepDuel)
+                    {
+                        
+                        PlayerBeaconTimer[player.Slot].Kill(); // Kill Timer if player die or leave
+                    } 
+                    DrawBeaconOnPlayer(player);
+                }, TimerFlags.REPEAT);
+            }
         }
 
         RemoveAllWeaponsFromMap(); // then remove all weapons from Map (this can also remove weapon from players but animation glitch)
-
+        
         g_PrepTime = Config.Duel_PrepTime;
         g_DuelTime = Config.Duel_Time;
         Random DuelMode = new Random();
@@ -397,7 +423,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(Winner == "")Winner = player.PlayerName; // Save the name of the alive Player
             else Winner = ""; // If Winner is already saved its mean 2 players are alived after the Duel. Then remove the Winner.
             GiveBackSavedWeaponsToPlayers(player);
-            
         }
         string[] Commands = GetDuelItem(SelectedDuelModeName)?.CMD_End.Split(",");
         if(mp_death_drop_gun_value > 1)Server.ExecuteCommand($"mp_death_drop_gun {mp_death_drop_gun_value}");
@@ -405,10 +430,10 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             Server.ExecuteCommand(cmd);
         }
-        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.Darkred}-----------------------------------------------------------------------");
-        if(Winner != "")Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}]  {ChatColors.Darkred}Duel Ended! {ChatColors.LightPurple}And the {ChatColors.Gold}Winner {ChatColors.LightPurple}is: {ChatColors.Green}{Winner}");
-        else Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.Darkred}★ {ChatColors.Green}SLAYER Duel {ChatColors.Darkred}★{ChatColors.Gold}] {ChatColors.Darkred}Duel Ended! {ChatColors.Grey}Draw");
-        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.Darkred}-----------------------------------------------------------------------");
+        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+        if(Winner != "")Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.DarkRed}Duel Ended! {ChatColors.LightPurple}And the {ChatColors.Gold}Winner {ChatColors.LightPurple}is: {ChatColors.Green}{Winner}");
+        else Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.DarkRed}Duel Ended! {ChatColors.Grey}Draw");
+        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
         g_PrepDuel = false;
         g_DuelStarted = false;
         
@@ -459,14 +484,20 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             DrawLaserBetween(CTPlayerPosition, TPlayerPosition, Color.Green, time, 2.0f);
         }
     }
-    private float CalculateDistance(Vector point1, Vector point2)
-    {
-        float dx = point2.X - point1.X;
-        float dy = point2.Y - point1.Y;
-        float dz = point2.Z - point1.Z;
-
-        return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
+    public void OnMapStart(string mapName) // Loading Duel Map Teleport Locations
+	{
+		if (!File.Exists(GetMapTeleportPositionConfigPath()))
+		{
+			return;
+		}
+		
+		var data = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(File.ReadAllText(GetMapTeleportPositionConfigPath()));
+		
+		if(data != null)
+		{
+			Duel_Positions = data;
+		}
+	}
     
     private void OnTick(CCSPlayerController player)
     {
@@ -507,25 +538,230 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         
         return HookResult.Continue;
     }
+    public void DrawBeaconOnPlayer(CCSPlayerController? player)
+    {
+        if(player == null || !player.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return;
+        
+        Vector mid =  new Vector(player?.PlayerPawn.Value.AbsOrigin.X,player?.PlayerPawn.Value.AbsOrigin.Y,player?.PlayerPawn.Value.AbsOrigin.Z);
+
+        int lines = 20;
+        int[] ent = new int[lines];
+        CBeam[] beam_ent = new CBeam[lines];
+
+        // draw piecewise approx by stepping angle
+        // and joining points with a dot to dot
+        float step = (float)(2.0f * Math.PI) / (float)lines;
+        float radius = 20.0f;
+
+        float angle_old = 0.0f;
+        float angle_cur = step;
+
+        float BeaconTimerSecond = 0.0f;
+
+        
+        for(int i = 0; i < lines; i++) // Drawing Beacon Circle
+        {
+            Vector start = angle_on_circle(angle_old, radius, mid);
+            Vector end = angle_on_circle(angle_cur, radius, mid);
+
+            if(player.TeamNum == 2)
+            {
+                var result = DrawLaserBetween(start, end, Color.Red, 1.0f, 2.0f);
+                ent[i] = result.Item1;
+                beam_ent[i] = result.Item2;
+            } 
+            if(player.TeamNum == 3)
+            {
+                var result = DrawLaserBetween(start, end, Color.Blue, 1.0f, 2.0f);
+                ent[i] = result.Item1;
+                beam_ent[i] = result.Item2;
+            }
+
+            angle_old = angle_cur;
+            angle_cur += step;
+        }
+        
+        AddTimer(0.1f, ()=>
+        {
+            if (BeaconTimerSecond >= 0.9f)
+            {
+                return;
+            }
+            for(int i = 0; i < lines; i++) // Moving Beacon Circle
+            {
+                Vector start = angle_on_circle(angle_old, radius, mid);
+                Vector end = angle_on_circle(angle_cur, radius, mid);
+
+                TeleportLaser(beam_ent[i], start, end);
+
+                angle_old = angle_cur;
+                angle_cur += step;
+            }
+            radius += 10;
+            BeaconTimerSecond += 0.1f;
+        }, TimerFlags.REPEAT);
+        PlaySoundOnPlayer(player, "sounds/tools/sfm/beep.vsnd_c");
+        return;
+    }
+    private void PlaySoundOnPlayer(CCSPlayerController? player, String sound)
+    {
+        if(player == null || !player.IsValid)return;
+        player.ExecuteClientCommand($"play {sound}");
+    }
     private static readonly Vector VectorZero = new Vector(0, 0, 0);
     private static readonly QAngle RotationZero = new QAngle(0, 0, 0);
-    public void DrawLaserBetween(Vector startPos, Vector endPos, Color color, float life, float width)
+    public (int, CBeam) DrawLaserBetween(Vector startPos, Vector endPos, Color color, float life, float width)
     {
-        if(startPos == null || endPos == null)return;
+        if (startPos == null || endPos == null)
+            return (-1, null);
+
         CBeam beam = Utilities.CreateEntityByName<CBeam>("beam");
+
         if (beam == null)
         {
             Logger.LogError($"Failed to create beam...");
-            return;
+            return (-1, null);
         }
+
         beam.Render = color;
         beam.Width = width;
-        
+
         beam.Teleport(startPos, RotationZero, VectorZero);
         beam.EndPos.X = endPos.X;
         beam.EndPos.Y = endPos.Y;
         beam.EndPos.Z = endPos.Z;
         beam.DispatchSpawn();
+
         AddTimer(life, () => { beam.Remove(); }); // destroy beam after specific time
+
+        return ((int)beam.Index, beam);
     }
+    public void TeleportLaser(CBeam? laser,Vector start, Vector end)
+    {
+        if(laser == null)return;
+        // set pos
+        laser.Teleport(start, RotationZero, VectorZero);
+        // end pos
+        // NOTE: we cant just move the whole vec
+        laser.EndPos.X = end.X;
+        laser.EndPos.Y = end.Y;
+        laser.EndPos.Z = end.Z;
+        Utilities.SetStateChanged(laser,"CBeam", "m_vecEndPos");
+    }
+    private float CalculateDistance(Vector point1, Vector point2)
+    {
+        float dx = point2.X - point1.X;
+        float dy = point2.Y - point1.Y;
+        float dz = point2.Z - point1.Z;
+
+        return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    private Vector angle_on_circle(float angle, float radius, Vector mid)
+    {
+        // {r * cos(x),r * sin(x)} + mid
+        // NOTE: we offset Z so it doesn't clip into the ground
+        return new Vector((float)(mid.X + (radius * Math.Cos(angle))),(float)(mid.Y + (radius * Math.Sin(angle))), mid.Z + 6.0f);
+    }
+    private void TeleportPlayer(CCSPlayerController? player)
+	{
+		if (Duel_Positions != null && Duel_Positions.ContainsKey(Server.MapName)) // If Map Exist in File
+		{
+            if(player == null || !player.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return; // If player is not Valid then return
+            Vector TeleportPosition = GetPositionFromFile(player.TeamNum); // Get Teleport Position From JSON file
+            if(TeleportPosition != null)player.PlayerPawn.Value.Teleport(TeleportPosition, player.PlayerPawn.Value.AngVelocity, new Vector(0f, 0f, 0f)); // Teleport Player to That position
+        }
+        else return; // If Map not Exist in File then do nothing
+    }
+
+    // Commands
+    [ConsoleCommand("duel_settings", "Open Chat Menu of Duel Settings")]
+	[RequiresPermissions("@css/root")]
+	public void DuelSettings(CCSPlayerController? player, CommandInfo command)
+	{
+        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected)
+		{
+			return;
+		}
+        var DuelSettings = new ChatMenu($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Settings {ChatColors.DarkRed}★{ChatColors.Gold}]");
+        DuelSettings.AddMenuOption($" {ChatColors.Red}Set Terrorist Teleport Point", SetTerroristTeleportPosition);
+        DuelSettings.AddMenuOption($" {ChatColors.Blue}Set C-Terrorist Teleport Point", SetCTerroristTeleportPosition);
+        DuelSettings.AddMenuOption($" {ChatColors.DarkRed}Delete all Teleport Points", DeleteTeleportPositions);
+        MenuManager.OpenChatMenu(player, DuelSettings);
+    }
+    private void SetTerroristTeleportPosition(CCSPlayerController player, ChatMenuOption option)
+    {
+        if(player == null || player.IsValid == false)return;
+
+        if (Duel_Positions.ContainsKey(Server.MapName)) // Check If Map already exist in JSON file
+        {
+            Dictionary<string, string> MapData = Duel_Positions[Server.MapName]; // Get Map Settings
+            MapData["T_Pos"] = $"{player.PlayerPawn.Value!.AbsOrigin}"; // Edit t_pos value
+            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
+        }
+        else // If Map not found in JSON file
+        {
+            // Save/add this in Global Veriable
+            Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}, {"CT_Pos", ""}});
+            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Saving Position in File
+        }
+        player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.Red}Terrorist {ChatColors.Gold}Duel Teleport Point {ChatColors.Green}has been Set at {ChatColors.Red}{player.PlayerPawn.Value!.AbsOrigin}");
+    }
+    private void SetCTerroristTeleportPosition(CCSPlayerController player, ChatMenuOption option)
+    {
+        if(player == null || player.IsValid == false)return;
+
+        if (Duel_Positions.ContainsKey(Server.MapName)) // Check If Map already exist in JSON file
+        {
+            Dictionary<string, string> MapData = Duel_Positions[Server.MapName]; // Get Map Settings
+            MapData["CT_Pos"] = $"{player.PlayerPawn.Value!.AbsOrigin}"; // Edit ct_pos value
+            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
+        }
+        else // If Map not found in JSON file
+        {
+            // Save/add this in Global Veriable
+            Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", ""}, {"CT_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}});
+            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
+        }
+		player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}Counter Terrorist {ChatColors.Gold}Duel Teleport Point {ChatColors.Green}has been Set at {ChatColors.Blue}{player.PlayerPawn.Value!.AbsOrigin}");
+	}
+    private void DeleteTeleportPositions(CCSPlayerController player, ChatMenuOption option)
+    {
+        if(player == null || player.IsValid == false)return;
+        
+        if (Duel_Positions != null && Duel_Positions.ContainsKey(Server.MapName)) // Check If Map exist in JSON file
+        {
+            Duel_Positions.Remove(Server.MapName); // Delete Map Settings
+            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Update File
+        }
+        player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.Gold}Duel Teleport Points {ChatColors.Green}has been {ChatColors.DarkRed}Deleted!");
+    }
+    private string GetMapTeleportPositionConfigPath()
+    {
+        string? path = Path.GetDirectoryName(ModuleDirectory);
+        if (Directory.Exists(path + $"/{ModuleName}"))
+        {
+            return Path.Combine(path, $"../configs/plugins/{ModuleName}/Duel_TeleportPositions.json");
+        }
+        return $"{ModuleDirectory}/Duel_TeleportPositions.json";
+    }
+    private Vector GetPositionFromFile(int TeamNum)
+    {
+        var mapData = Duel_Positions[Server.MapName]; // Get Current Map Teleport Positions
+        if (TeamNum == 2 && mapData.ContainsKey("T_Pos") && mapData["T_Pos"] != "") // If player team is Terrorist then get the T_Pos from File
+        {
+            string[] Positions = mapData["T_Pos"].Split(" "); // Split Coordinates with space " "
+            return new Vector(float.Parse(Positions[0]), float.Parse(Positions[1]), float.Parse(Positions[2])); // Return Coordinates in Vector
+        }
+        else if(TeamNum == 3 && mapData.ContainsKey("CT_Pos") && mapData["CT_Pos"] != "") // If player team is C-Terrorist then get the CT_Pos from File
+        {
+            string[] Positions = mapData["CT_Pos"].Split(" "); // Split Coordinates with space " "
+            return new Vector(float.Parse(Positions[0]), float.Parse(Positions[1]), float.Parse(Positions[2])); // Return Coordinates in Vector
+        }
+        return null;
+    }
+    public static CCSGameRules GetGameRules()
+    {
+        return Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules!;
+    }
+
 }
