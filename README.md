@@ -32,10 +32,15 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **10.** You can Enable/Disable Bullet Tracers in Duel Mode.
 
-## TO DO:
-**1.** Add the ability to Create Custom Teleport Points.
+**11.** You can Enable/Disable **Beacon** on Players.
 
-**2.** Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)
+**12.** You can add/remove **Custom Teleport Points** through **!duel_settings** command (Only for Root Admins).
+
+## Commands:
+`!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
+
+## TO DO:
+**1.** Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)
 
 ## Configuration:
 ```
@@ -47,6 +52,8 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
   "Duel_PrepTime": 3,           // Duel Preperation Time
   "Duel_MinPlayers": 3,         // Minimum Players needed on Server to Start Duel (3 - is the minimum Value, otherwise duel won't start)
   "Duel_DrawPunish": 3,         // What to do with the players when the timer expires? 0 - Nothing, 1 - Kill both, 2 - Kill a random player, 3 - Kill the one with less health (if non of them given any damage then kill both).
+  "Duel_Beacon": true,          // Enable/Disable Beacon on Players
+  "Duel_Teleport": true,        // Teleport Players to Custom Teleport Points? (true = Yes, false = No) Set Custom Teleport Points with `!duel_settings` (Only for ROOT Admins) Command. 
   "Duel_Modes": [
     // Example Duel Mode
     //{
