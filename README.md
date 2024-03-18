@@ -45,15 +45,16 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 ## Configuration:
 ```
 {
-  "PluginEnabled": true,        // Enable/Disable Plugin
-  "Duel_ForceStart": true,      // Force Start Duel? (true = Yes, false = Vote for Duel)
-  "Duel_DrawLaserBeam": true,   // Draw Laser Beam Between Player to find each other if they are Far from Each other. 
-  "Duel_Time": 30,              // Duel Time
-  "Duel_PrepTime": 3,           // Duel Preperation Time
-  "Duel_MinPlayers": 3,         // Minimum Players needed on Server to Start Duel (3 - is the minimum Value, otherwise duel won't start)
-  "Duel_DrawPunish": 3,         // What to do with the players when the timer expires? 0 - Nothing, 1 - Kill both, 2 - Kill a random player, 3 - Kill the one with less health (if non of them given any damage then kill both).
-  "Duel_Beacon": true,          // Enable/Disable Beacon on Players
-  "Duel_Teleport": true,        // Teleport Players to Custom Teleport Points? (true = Yes, false = No) Set Custom Teleport Points with `!duel_settings` (Only for ROOT Admins) Command. 
+  "PluginEnabled": true,          // Enable/Disable Plugin
+  "Duel_ForceStart": true,        // Force Start Duel? (true = Yes, false = Vote for Duel)
+  "Duel_ShowMenuInCenter": true,  // Location of Duel Voting Menu? (true = Center, false = Chat)
+  "Duel_DrawLaserBeam": true,     // Draw a Laser Beam Between Players to find each other if they are Far from Each other. 
+  "Duel_Time": 30,                // Duel Time
+  "Duel_PrepTime": 3,             // Duel Preperation Time
+  "Duel_MinPlayers": 3,           // Minimum Players needed on Server to Start Duel (3 - is the minimum Value, otherwise duel won't start)
+  "Duel_DrawPunish": 3,           // What to do with the players when the timer expires? 0 - Nothing, 1 - Kill both, 2 - Kill a random player, 3 - Kill the one with less health (if non of them is given any damage then kill both).
+  "Duel_Beacon": true,            // Enable/Disable Beacon on Players
+  "Duel_Teleport": true,          // Teleport Players to Custom Teleport Points? (true = Yes, false = No) Set Custom Teleport Points with `!duel_settings` (Only for ROOT Admins) Command. 
   "Duel_Modes": [
     // Example Duel Mode
     //{
