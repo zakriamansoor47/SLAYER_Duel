@@ -243,7 +243,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             PlayersDuelVoteOption[1] = true;
             Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
         }
-        if(PlayersDuelVoteOption[0])
+        if(PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1])
         {
             Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
             PrepDuel();
