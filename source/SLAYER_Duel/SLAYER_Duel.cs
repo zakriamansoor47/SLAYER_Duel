@@ -7,6 +7,7 @@ using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Menu;
+using CounterStrikeSharp.API.Modules.Memory;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Drawing;
@@ -27,12 +28,15 @@ public class SLAYER_DuelConfig : BasePluginConfig
     [JsonPropertyName("Duel_ForceStart")] public bool Duel_ForceStart { get; set; } = true;
     [JsonPropertyName("Duel_ShowMenuInCenter")] public bool Duel_ShowMenuInCenter { get; set; } = true;
     [JsonPropertyName("Duel_DrawLaserBeam")] public bool Duel_DrawLaserBeam { get; set; } = true;
+    [JsonPropertyName("Duel_BotAcceptDuel")] public bool Duel_BotAcceptDuel { get; set; } = true;
+    [JsonPropertyName("Duel_BotsDoDuel")] public bool Duel_BotsDoDuel { get; set; } = true;
     [JsonPropertyName("Duel_Time")] public int Duel_Time { get; set; } = 30;
     [JsonPropertyName("Duel_PrepTime")] public int Duel_PrepTime { get; set; } = 3;
     [JsonPropertyName("Duel_MinPlayers")] public int Duel_MinPlayers { get; set; } = 3;
     [JsonPropertyName("Duel_DrawPunish")] public int Duel_DrawPunish { get; set; } = 3;
     [JsonPropertyName("Duel_Beacon")] public bool Duel_Beacon { get; set; } = true;
     [JsonPropertyName("Duel_Teleport")] public bool Duel_Teleport { get; set; } = true;
+    [JsonPropertyName("Duel_FreezePlayers")] public bool Duel_FreezePlayers { get; set; } = false;
     [JsonPropertyName("Duel_Modes")] public List<DuelModeSettings> Duel_Modes { get; set; } = new List<DuelModeSettings>();
 }
 public class DuelModeSettings
@@ -49,11 +53,12 @@ public class DuelModeSettings
     [JsonPropertyName("Gravity")] public float Gravity { get; set; } = 1.0f;
     [JsonPropertyName("NoZoom")] public bool NoZoom { get; set; } = false;
     [JsonPropertyName("OnlyHeadshot")] public bool Only_headshot { get; set; } = false;
+     [JsonPropertyName("DisableKnife")] public bool DisableKnife { get; set; } = false;
 }
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.3";
+    public override string ModuleVersion => "1.4";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -79,6 +84,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public bool g_PrepDuel = false;
     public bool g_DuelNoscope = false;
     public bool g_DuelHSOnly = false;
+    public bool g_DuelDisableKnife = false;
     public bool g_DuelBullettracers = false;
     public bool g_IsDuelPossible = false;
     public bool[] PlayersDuelVoteOption = new bool[2];
@@ -87,7 +93,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public int SelectedMode;
     public string SelectedDuelModeName = "";
     public ConVar? mp_death_drop_gun = ConVar.Find("mp_death_drop_gun");
-    int mp_death_drop_gun_value;
+    public int mp_death_drop_gun_value;
     // Timers
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_PrepDuel;
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_DuelTimer;
@@ -106,16 +112,16 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 {
                     player.PrintToCenterHtml
                     (
-                        $"<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>Duel will Start in:</font><font color='red'> |:.</font><br>" +
-                        $"<font color='green'>►</font> <font class='fontSize-m' color='red'>{g_PrepTime:0}s</font> <font color='green'>◄</font><br>"
+                        $"{Localizer["CenterHtml.DuelPrep"]}" +
+                        $"{Localizer["CenterHtml.DuelPrepTime", g_PrepTime]}"
                     );
                 }
                 if(g_DuelStarted)
                 {
                     player.PrintToCenterHtml
                     (
-                        $"<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>The Duel will End in:</font><font color='red'> |:.</font><br>" +
-                        $"<font color='green'>►</font> <font class='fontSize-m' color='red'>{g_DuelTime:0}s</font> <font color='green'>◄</font><br>"
+                        $"{Localizer["CenterHtml.DuelEnd"]}" +
+                        $"{Localizer["CenterHtml.DuelPrepTime", g_DuelTime]}"
                     );
                     if(g_DuelNoscope && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE)OnTick(player);
                 }
@@ -131,21 +137,30 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
         {
-            if(!Config.PluginEnabled || !g_PrepDuel || !g_DuelStarted)return HookResult.Continue;
+            if(!Config.PluginEnabled || @event.Userid == null || !@event.Userid.IsValid)return HookResult.Continue;
             // Kill player if he spawn during duel
-            @event.Userid.PlayerPawn.Value.CommitSuicide(false, true);
+            if(g_PrepDuel || g_DuelStarted)@event.Userid.PlayerPawn.Value.CommitSuicide(false, true);
             return HookResult.Continue;
         });
         RegisterEventHandler<EventRoundEnd>((@event, info) =>
         {
+            if(g_IsDuelPossible)
+            {
+                foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
+                {
+                    MenuManager.CloseActiveMenu(player);
+                }
+            }
             g_PrepDuel = false;
             g_DuelStarted = false;
             g_IsDuelPossible = false;
+            
             return HookResult.Continue;
         });
         RegisterEventHandler<EventWeaponFire>((@event, info) =>
         {
             if(!Config.PluginEnabled || !g_DuelStarted)return HookResult.Continue;
+            if(!@event.Userid.IsValid || @event.Userid == null)return HookResult.Continue;
             // Unlimited Reserve Ammo
             var weapon = @event.Userid.PlayerPawn.Value.WeaponServices.ActiveWeapon.Value;
             if(weapon.DesignerName != "weapon_knife" || weapon.DesignerName != "weapon_bayonet")weapon.ReserveAmmo[0] = 100;
@@ -153,38 +168,46 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerHurt>((@event, info) => 
         {
-            if(!Config.PluginEnabled || !g_DuelStarted || !g_DuelHSOnly)return HookResult.Continue;
-            if (!@event.Userid.IsValid || @event.Userid == null)
+            if(!Config.PluginEnabled || !g_DuelStarted || !g_DuelHSOnly && !g_DuelDisableKnife)return HookResult.Continue;
+            if(!@event.Userid.IsValid || @event.Userid == null || !@event.Attacker.IsValid || @event.Attacker == null)
                 return HookResult.Continue;
-
+            // Some Checks to validate Attacker
             CCSPlayerController attacker = @event.Attacker;
             CCSPlayerController player = @event.Userid;
             if (!attacker.IsValid || @event.Userid.TeamNum == attacker.TeamNum && !(@event.DmgHealth > 0 || @event.DmgArmor > 0))
                 return HookResult.Continue;
 
-            if(@event.Hitgroup != 1) // if headshot is enabled and bullet not hitting on Head
+            if(g_DuelHSOnly && @event.Hitgroup != 1) // if headshot is enabled and bullet not hitting on Head
             {
                 player.PlayerPawn.Value.Health += @event.DmgHealth; // add the dmg health to Normal health
                 player.PlayerPawn.Value.ArmorValue += @event.DmgArmor; // Update the Armor as well
+            }
+
+            if(g_DuelDisableKnife && @event.Weapon.Contains("knife") || @event.Weapon.Contains("bayonet")) // if DisableKnife is Enabled then Disable Knife Damage
+            {
+                player.PlayerPawn.Value.Health += @event.DmgHealth; // add the dmg health to Normal health
+                player.PlayerPawn.Value.ArmorValue += @event.DmgArmor; // Update the Armor as well
+                attacker.PrintToChat($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.Knife"]}"); // Send Message to attacker
             }
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerDeath>((@event, info) =>
         {
-            if(!Config.PluginEnabled)return HookResult.Continue; // Plugin should be Enabled
+            if(!Config.PluginEnabled)return HookResult.Continue; // Plugin should be Enable
             int ctplayer = 0, tplayer = 0, totalplayers = 0;
             // Count Players in Both Team on Any Player Death
-            foreach (var player in Utilities.GetPlayers().Where(player => player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
+            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
             {
                 if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 2)tplayer++;
                 if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 3)ctplayer++;
                 if(g_DuelStarted)player.RemoveWeapons();
                 totalplayers++;
             }
+            if(Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1)g_IsDuelPossible = true;
+            else g_IsDuelPossible = false;
             CCSGameRules gamerules = GetGameRules();
-            if(Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1 && !gamerules.WarmupPeriod) // 1vs1 Situation and its not warmup
+            if(!gamerules.WarmupPeriod && g_IsDuelPossible) // 1vs1 Situation and its not warmup
             {
-                g_IsDuelPossible = true;
                 if(Config.Duel_ForceStart) // If Force Start Duel is true
                 {
                     PrepDuel();
@@ -192,30 +215,37 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 else // if force start duel is false
                 {
                     PlayersDuelVoteOption[0] = false; PlayersDuelVoteOption[1] = false;
-                    foreach (var player in Utilities.GetPlayers().Where(player => player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
+                    foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && !player.ControllingBot))
                     {
-                        if(player.IsBot) // Bot always accept duel
+                        if(player.IsBot && Config.Duel_BotAcceptDuel) // Check Player is BOT and Bot allowed to Duel
                         {
                             if(player.TeamNum == 2)PlayersDuelVoteOption[0] = true;
                             else if(player.TeamNum == 3)PlayersDuelVoteOption[1] = true;
+                            if(PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1] && Config.Duel_BotsDoDuel)PrepDuel(); // Start Duel Between Bots if Duel_BotsDoDuel is Enabled in Config file
+                        }
+                        else if(player.IsBot && !Config.Duel_BotAcceptDuel) // Check Player is BOT and Bot is not allowed to Duel
+                        {
+                            if(player.TeamNum == 2)PlayersDuelVoteOption[0] = false;
+                            else if(player.TeamNum == 3)PlayersDuelVoteOption[1] = false;
                         }
                         else 
                         {
                             if(!Config.Duel_ShowMenuInCenter)
                             {   
-                                var DuelVote_Chat = new ChatMenu($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Vote {ChatColors.DarkRed}★{ChatColors.Gold}]");
-                                DuelVote_Chat.AddMenuOption($" {ChatColors.Green}Accept", AcceptDuelVoteOption);
-                                DuelVote_Chat.AddMenuOption($"{ChatColors.DarkRed}Decline", DeclineDuelVoteOption);
+                                var DuelVote_Chat = new ChatMenu($"{Localizer["Menu.Title"]}");
+                                DuelVote_Chat.AddMenuOption($"{Localizer["Menu.Accept"]}", AcceptDuelVoteOption);
+                                DuelVote_Chat.AddMenuOption($"{Localizer["Menu.Decline"]}", DeclineDuelVoteOption);
                                 DuelVote_Chat.PostSelectAction = PostSelectAction.Close;
                                 MenuManager.OpenChatMenu(player, DuelVote_Chat);
                             }
                             else 
                             {
-                                var DuelVote_Center = new CenterHtmlMenu($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Vote {ChatColors.DarkRed}★{ChatColors.Gold}]");
-                                DuelVote_Center.AddMenuOption($" {ChatColors.Green}Accept", AcceptDuelVoteOption);
-                                DuelVote_Center.AddMenuOption($"{ChatColors.DarkRed}Decline", DeclineDuelVoteOption);
+                                var DuelVote_Center = new CenterHtmlMenu($"{Localizer["Menu.Title"]}", this);
+                                DuelVote_Center.AddMenuOption($"{Localizer["Menu.Accept"]}", AcceptDuelVoteOption);
+                                DuelVote_Center.AddMenuOption($"{Localizer["Menu.Decline"]}", DeclineDuelVoteOption);
                                 DuelVote_Center.PostSelectAction = PostSelectAction.Close;
                                 MenuManager.OpenCenterHtmlMenu(this, player, DuelVote_Center);
+                                
                             }
                         }
                     }
@@ -236,36 +266,36 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if(player.TeamNum == 2)
         {
             PlayersDuelVoteOption[0] = true;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.T", player.PlayerName]}");
         }
         else if(player.TeamNum == 3)
         {
             PlayersDuelVoteOption[1] = true;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.CT", player.PlayerName]}");
         }
         if(PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1])
         {
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.Green}Accepted {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.Both"]}");
             PrepDuel();
         }
     }
     private void DeclineDuelVoteOption(CCSPlayerController player, ChatMenuOption option)
     {
         if (player == null || player.IsValid == false || player.IsBot == true || !g_IsDuelPossible)return;
-
+        
         if(player.TeamNum == 2)
         {
             PlayersDuelVoteOption[0] = false;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Red}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.RejectedDuel.Both", player.PlayerName]}");
         }
         else if(player.TeamNum == 3)
         {
             PlayersDuelVoteOption[1] = false;
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}{player.PlayerName} {ChatColors.Purple}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.RejectedDuel.Both", player.PlayerName]}");
         }
         if(!PlayersDuelVoteOption[0] && !PlayersDuelVoteOption[1])
         {
-            Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Purple}Both Players {ChatColors.DarkRed}Rejected {ChatColors.Gold}to Duel!");
+            Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.RejectedDuel.Both"]}");
         }
     }
     public void RemoveAllWeaponsFromMap()
@@ -291,7 +321,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 var SelectedModeName = Config.Duel_Modes.ElementAt(SelectedMode);
                 SelectedDuelModeName = SelectedModeName.Name;
                 Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-                Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.DarkRed}Duel Started: {ChatColors.Green} {SelectedModeName.Name}");
+                Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.Started", SelectedModeName.Name]}");
                 Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
                 StartDuel(SelectedModeName.Name);
                 g_PrepDuel = false;
@@ -307,7 +337,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     
     public void DuelStartedTimer()
     {
-        if(g_DuelTime <= 0.0f || g_DuelStarted == false)
+        if(g_DuelTime <= 0.0f || g_DuelStarted == false || g_IsDuelPossible == false)
         {
             EndDuel();
             t_DuelTimer?.Kill();
@@ -323,6 +353,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         foreach (var player in Utilities.GetPlayers().Where(player => player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
         {
             if(Config.Duel_Teleport)TeleportPlayer(player);
+            if(Config.Duel_FreezePlayers)FreezePlayer(player);   // Freeze Player
             SavePlayerWeapons(player); // first save player weapons
             player.RemoveWeapons(); // then remove weapons from player
             if(Config.Duel_Beacon) // If Beacon Enabled
@@ -363,6 +394,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         g_DuelNoscope = GetDuelItem(DuelModeName).NoZoom;
         g_DuelHSOnly = GetDuelItem(DuelModeName).Only_headshot;
         g_DuelBullettracers = GetDuelItem(DuelModeName).BulletTracers;
+        g_DuelDisableKnife = GetDuelItem(DuelModeName).DisableKnife;
         
         mp_death_drop_gun_value = mp_death_drop_gun.GetPrimitiveValue<int>();
         if(mp_death_drop_gun_value != 0)Server.ExecuteCommand("mp_death_drop_gun 0");
@@ -373,17 +405,17 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         }
         foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
         {
-            player.PlayerPawn.Value!.Health = GetDuelItem(DuelModeName).Health;
+           player.PlayerPawn.Value!.Health = GetDuelItem(DuelModeName).Health;
             player.PlayerPawn.Value!.VelocityModifier = GetDuelItem(DuelModeName).Speed;
             player.PlayerPawn.Value!.GravityScale *= GetDuelItem(DuelModeName).Gravity;
             if(GetDuelItem(DuelModeName).Helmet < 1)player.PlayerPawn.Value!.ArmorValue = GetDuelItem(DuelModeName).Armor;
             else player.GiveNamedItem("item_assaultsuit");
-
             foreach(var weapon in weapons) // Give Each Weapon
             {
                 player.GiveNamedItem(weapon);
             }
-        }  
+            if(Config.Duel_FreezePlayers)UnFreezePlayer(player); // Unfreeze Player
+        }
     }
     
     public void EndDuel()
@@ -437,12 +469,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Server.ExecuteCommand(cmd);
         }
         Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-        if(Winner != "")Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.DarkRed}Duel Ended! {ChatColors.LightPurple}And the {ChatColors.Gold}Winner {ChatColors.LightPurple}is: {ChatColors.Green}{Winner}");
-        else Server.PrintToChatAll($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.DarkRed}Duel Ended! {ChatColors.Grey}Draw");
+        if(Winner != "")Server.PrintToChatAll($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.Duel.EndWins", Winner]}");
+        else Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.EndDraw"]}");
         Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
         g_PrepDuel = false;
         g_DuelStarted = false;
-        
+        if(t_DuelTimer != null)t_DuelTimer?.Kill();
     }
     private DuelModeSettings GetDuelItem(string DuelModeName)
     {
@@ -634,7 +666,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     }
     public void TeleportLaser(CBeam? laser,Vector start, Vector end)
     {
-        if(laser == null)return;
+        if(laser == null || !laser.IsValid)return;
         // set pos
         laser.Teleport(start, RotationZero, VectorZero);
         // end pos
@@ -678,10 +710,10 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 		{
 			return;
 		}
-        var DuelSettings = new ChatMenu($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER {ChatColors.Gold}Duel {ChatColors.Purple}Settings {ChatColors.DarkRed}★{ChatColors.Gold}]");
-        DuelSettings.AddMenuOption($" {ChatColors.Red}Set Terrorist Teleport Point", SetTerroristTeleportPosition);
-        DuelSettings.AddMenuOption($" {ChatColors.Blue}Set C-Terrorist Teleport Point", SetCTerroristTeleportPosition);
-        DuelSettings.AddMenuOption($" {ChatColors.DarkRed}Delete all Teleport Points", DeleteTeleportPositions);
+        var DuelSettings = new ChatMenu($"{Localizer["MenuSettings.Title"]}");
+        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportSetT"]}", SetTerroristTeleportPosition);
+        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportSetCT"]}", SetCTerroristTeleportPosition);
+        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportDelete"]}", DeleteTeleportPositions);
         DuelSettings.PostSelectAction = PostSelectAction.Close;
         MenuManager.OpenChatMenu(player, DuelSettings);
     }
@@ -701,7 +733,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}, {"CT_Pos", ""}});
             File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Saving Position in File
         }
-        player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.Red}Terrorist {ChatColors.Gold}Duel Teleport Point {ChatColors.Green}has been Set at {ChatColors.Red}{player.PlayerPawn.Value!.AbsOrigin}");
+        player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.TeleportSetT", player.PlayerPawn.Value!.AbsOrigin]}");
     }
     private void SetCTerroristTeleportPosition(CCSPlayerController player, ChatMenuOption option)
     {
@@ -719,7 +751,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", ""}, {"CT_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}});
             File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
         }
-		player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}] {ChatColors.Blue}Counter Terrorist {ChatColors.Gold}Duel Teleport Point {ChatColors.Green}has been Set at {ChatColors.Blue}{player.PlayerPawn.Value!.AbsOrigin}");
+		player.PrintToChat($"{Localizer["Chat.Prefix"]} {Localizer["Chat.DuelSettings.TeleportSetCT", player.PlayerPawn.Value!.AbsOrigin]}");
 	}
     private void DeleteTeleportPositions(CCSPlayerController player, ChatMenuOption option)
     {
@@ -730,7 +762,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Duel_Positions.Remove(Server.MapName); // Delete Map Settings
             File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Update File
         }
-        player.PrintToChat($" {ChatColors.Gold}[{ChatColors.DarkRed}★ {ChatColors.Green}SLAYER Duel {ChatColors.DarkRed}★{ChatColors.Gold}]  {ChatColors.Gold}Duel Teleport Points {ChatColors.Green}has been {ChatColors.DarkRed}Deleted!");
+        player.PrintToChat($"{Localizer["Chat.Prefix"]} {Localizer["Chat.DuelSettings.TeleportDelete"]}");
     }
     private string GetMapTeleportPositionConfigPath()
     {
@@ -773,6 +805,22 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public static CCSGameRules GetGameRules()
     {
         return Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules!;
+    }
+    private void FreezePlayer(CCSPlayerController? player)
+    {
+        if(player == null || !player.IsValid)return;
+        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_NONE;
+        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 0); // freeze
+        Utilities.SetStateChanged(player.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
+        player.PlayerPawn.Value.TakesDamage = false;
+    }
+    private void UnFreezePlayer(CCSPlayerController? player)
+    {
+        if(player == null || !player.IsValid)return;
+        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_WALK;
+        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 2); // walk
+        Utilities.SetStateChanged(player.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
+        player.PlayerPawn.Value.TakesDamage = true;
     }
 
 }
