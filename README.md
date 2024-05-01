@@ -36,11 +36,17 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **12.** You can add/remove **Custom Teleport Points** through **!duel_settings** command (Only for Root Admins).
 
+**13.** You can Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)
+
+**14.** You can Enable/Disable Duel Between Bots.
+
+**15.** You can Enable/Disable Duel with Player vs Bot.
+
 ## Commands:
 `!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
 
 ## TO DO:
-**1.** Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)
+**1.** ~~Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)~~
 
 ## Configuration:
 ```
@@ -55,6 +61,9 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
   "Duel_DrawPunish": 3,           // What to do with the players when the timer expires? 0 - Nothing, 1 - Kill both, 2 - Kill a random player, 3 - Kill the one with less health (if non of them is given any damage then kill both).
   "Duel_Beacon": true,            // Enable/Disable Beacon on Players
   "Duel_Teleport": true,          // Teleport Players to Custom Teleport Points? (true = Yes, false = No) Set Custom Teleport Points with `!duel_settings` (Only for ROOT Admins) Command. 
+  "Duel_FreezePlayers": false,    // Freeze Players During Duel Preparation time? (true = Yes, false = No)
+  "Duel_BotAcceptDuel": true,     // Bot do Duel with Player? (true = Yes, false = No)
+  "Duel_BotsDoDuel": true,        // Bots do Duel with each other? (true = Yes, false = No)
   "Duel_Modes": [
     // Example Duel Mode
     //{
@@ -69,6 +78,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
     //  "NoZoom": true,                                             // Enable Noscope Only? (true = Yes, false = No)
     //  "OnlyHeadshot": true,                                       // Enable Headshot Only? (true = Yes, false = No)
     //  "BulletTracers": true,                                      // Show Bullet Tracers? (true = Yes, false = No)
+    //  "DisableKnife": true,                                       // Disable Knife Damage? (true = Yes, false = No)
     //  "Name": "Awp+Noscope"                                       // Duel Mode Name (Required)
     //},
     {
@@ -94,6 +104,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
       "Helmet": 0,
       "NoZoom": true,
       "BulletTracers": true,
+      "DisableKnife": true,
       "Name": "Awp+Noscope"
     },
     {
@@ -102,6 +113,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
       "Armor": 100,
       "Helmet": 0,
       "Gravity": 0.2,
+      "DisableKnife": true,
       "Name": "Scout+Gravity"
     },
     {
@@ -111,6 +123,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
       "Helmet": 1,
       "Speed": 2,
       "OnlyHeadshot": true,
+      "DisableKnife": true,
       "Name": "Shotgun+Speed+200 HP"
     },
     {
@@ -119,7 +132,19 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
       "Armor": 100,
       "Helmet": 0,
       "OnlyHeadshot": true,
+      "DisableKnife": true,
       "Name": "Deagle+Headshot"
+    },
+    {
+      "Weapons": "weapon_hegrenade,weapon_knife",
+      "CMD": "sv_infinite_ammo 1",
+      "CMD_End": "sv_infinite_ammo 0",
+      "Health": 100,
+      "Armor": 100,
+      "Helmet": 0,
+      "BulletTracers": true,
+      "DisableKnife": true,
+      "Name": "Grenade Only"
     }
     // Add your Custom Duels
   ],
