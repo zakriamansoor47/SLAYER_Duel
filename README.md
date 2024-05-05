@@ -42,6 +42,8 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **15.** You can Enable/Disable Duel with Player vs Bot.
 
+**16.** Play Sound with Duel Starts.
+
 ## Commands:
 `!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
 
@@ -64,6 +66,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
   "Duel_FreezePlayers": false,    // Freeze Players During Duel Preparation time? (true = Yes, false = No)
   "Duel_BotAcceptDuel": true,     // Bot do Duel with Player? (true = Yes, false = No)
   "Duel_BotsDoDuel": true,        // Bots do Duel with each other? (true = Yes, false = No)
+  "Duel_DuelSoundPath": "",       // Path of the Duel Sound which will play on Duel Start? NOTE: Please Use a very short sound cause there is no way to stop the sound if Duel Ends. ("" = Disabled)
   "Duel_Modes": [
     // Example Duel Mode
     //{
