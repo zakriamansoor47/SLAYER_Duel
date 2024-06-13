@@ -78,78 +78,84 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
     //  "Helmet": 0,                                                // 0 = No Helmet, 1 = Helmet + 100 Armor
     //  "Speed": 2.0,                                               // Speed of the Players? (1.0 = Normal, <1.0 = Slow, >1.0 = Fast)
     //  "Gravity": 0.2,                                             // Gravity of the Players? (1.0 = Normal Gravity, <1.0 = Low Gravity, >1.0 = High Gravity)
-    //  "NoZoom": true,                                             // Enable Noscope Only? (true = Yes, false = No)
+    //	"InfiniteAmmo": 2,											// Infinite Ammo (0 = Disable | 1 = Unlimited Clip Ammo | 2 = Unlimited Reserve Ammo)
+	//  "NoZoom": true,                                             // Enable Noscope Only? (true = Yes, false = No)
     //  "OnlyHeadshot": true,                                       // Enable Headshot Only? (true = Yes, false = No)
     //  "BulletTracers": true,                                      // Show Bullet Tracers? (true = Yes, false = No)
     //  "DisableKnife": true,                                       // Disable Knife Damage? (true = Yes, false = No)
     //  "Name": "Awp+Noscope"                                       // Duel Mode Name (Required)
     //},
-    {
-      "Weapons": "weapon_knife",
-      "CMD": "sv_autobunnyhopping 1",
-      "CMD_End": "sv_autobunnyhopping 0",
-      "Health": 100,
-      "Armor": 100,
-      "Helmet": 0,
-      "Name": "Knife+Bhop"
+	{
+		"Weapons": "weapon_knife",
+		"Health": 100,
+		"Armor": 0,
+		"Helmet": 0,
+		"CMD": "sv_autobunnyhopping 1",
+		"CMD_End": "sv_autobunnyhopping 0",
+		"Name": "Knife Only + Bhop"
+    },
+	{
+		"Weapons": "weapon_knife",
+		"Health": 35,
+		"Armor": 0,
+		"Helmet": 0,
+		"Name": "35 HP + Knife Only"
     },
     {
-      "Weapons": "weapon_knife",
-      "Health": 35,
-      "Armor": 0,
-      "Helmet": 0,
-      "Name": "35 HP+Knife"
+		"Weapons": "weapon_awp,weapon_knife",
+		"Health": 100,
+		"Armor": 100,
+		"Helmet": 0,
+		"InfiniteAmmo": 2,
+		"NoZoom": true,
+		"BulletTracers": true,
+		"DisableKnife": true,
+		"Name": "Awp+Noscope"
     },
     {
-      "Weapons": "weapon_awp,weapon_knife",
-      "Health": 100,
-      "Armor": 100,
-      "Helmet": 0,
-      "NoZoom": true,
-      "BulletTracers": true,
-      "DisableKnife": true,
-      "Name": "Awp+Noscope"
+		"Weapons": "weapon_ssg08,weapon_knife",
+		"Health": 100,
+		"Armor": 100,
+		"Helmet": 0,
+		"Gravity": 0.2,
+		"InfiniteAmmo": 2,
+		"BulletTracers": true,
+		"DisableKnife": true,
+		"Name": "Scout+Gravity"
     },
     {
-      "Weapons": "weapon_ssg08,weapon_knife",
-      "Health": 100,
-      "Armor": 100,
-      "Helmet": 0,
-      "Gravity": 0.2,
-      "DisableKnife": true,
-      "Name": "Scout+Gravity"
+		"Weapons": "weapon_nova,weapon_knife",
+		"Health": 200,
+		"Armor": 100,
+		"Helmet": 0,
+		"Speed": 2,
+		"InfiniteAmmo": 2,
+		"OnlyHeadshot": true,
+		"BulletTracers": true,
+		"DisableKnife": true,
+		"Name": "Shotgun+Speed"
     },
     {
-      "Weapons": "weapon_nova,weapon_knife",
-      "Health": 200,
-      "Armor": 100,
-      "Helmet": 1,
-      "Speed": 2,
-      "OnlyHeadshot": true,
-      "DisableKnife": true,
-      "Name": "Shotgun+Speed+200 HP"
+		"Weapons": "weapon_ak47,weapon_knife",
+		"Health": 100,
+		"Armor": 100,
+		"Helmet": 0,
+		"InfiniteAmmo": 2,
+		"OnlyHeadshot": true,
+		"BulletTracers": true,
+		"DisableKnife": true,
+		"Name": "AK47+Headshot"
     },
     {
-      "Weapons": "weapon_deagle,weapon_knife",
-      "Health": 100,
-      "Armor": 100,
-      "Helmet": 0,
-      "OnlyHeadshot": true,
-      "DisableKnife": true,
-      "Name": "Deagle+Headshot"
-    },
-    {
-      "Weapons": "weapon_hegrenade,weapon_knife",
-      "CMD": "sv_infinite_ammo 1",
-      "CMD_End": "sv_infinite_ammo 0",
-      "Health": 100,
-      "Armor": 100,
-      "Helmet": 0,
-      "BulletTracers": true,
-      "DisableKnife": true,
-      "Name": "Grenade Only"
+		"Weapons": "weapon_hegrenade,weapon_knife",
+		"Health": 100,
+		"Armor": 100,
+		"Helmet": 0,
+		"InfiniteAmmo": 1,
+		"BulletTracers": true,
+		"DisableKnife": true,
+		"Name": "Grenade Only"
     }
-    // Add your Custom Duels
   ],
   "ConfigVersion": 1
 }
