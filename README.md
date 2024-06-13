@@ -44,6 +44,8 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **16.** Play Sound with Duel Starts.
 
+**17.** You can Enable/Disable Infinite Ammo in Duel. Infinite Clip and Reserve Ammo
+
 ## Commands:
 `!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
 
