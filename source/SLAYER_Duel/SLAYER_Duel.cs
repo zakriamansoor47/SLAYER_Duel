@@ -62,7 +62,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.6";
+    public override string ModuleVersion => "1.6.1";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -522,7 +522,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if(Winner != "" && !IsCTWon)TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.TerroristsEscaped);
         else if(Winner != "" && IsCTWon)TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.CTsPreventEscape);
         else if(Winner == "")TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.RoundDraw);
-    
+        
         Server.ExecuteCommand("mp_ignore_round_win_conditions 0");
     }
     private DuelModeSettings GetDuelItem(string DuelModeName)
@@ -533,10 +533,14 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     private void SavePlayerWeapons(CCSPlayerController? player)
     {
         if(player == null || !player.IsValid)return;
+        if(player.PlayerPawn == null || !player.PlayerPawn.IsValid)return;
+        if(!player.PawnIsAlive)return;
+        if(player.PlayerPawn.Value == null || !player.PlayerPawn.Value.IsValid)return;
+        if(player.PlayerPawn.Value.WeaponServices == null || player.PlayerPawn.Value.WeaponServices.MyWeapons == null)return;
         // Initialize the list for the current player
         playerSavedWeapons[player.UserId.ToString()] = new List<string>();
         // Get Player Weapons
-        foreach (var weapon in player.PlayerPawn.Value.WeaponServices?.MyWeapons.Where(weapons => weapons != null && weapons.IsValid))
+        foreach (var weapon in player.PlayerPawn.Value.WeaponServices?.MyWeapons.Where(weapons => weapons != null && weapons.IsValid && weapons.Value != null && weapons.Value.DesignerName != null))
         {
             playerSavedWeapons[player.UserId.ToString()].Add($"{weapon.Value.DesignerName}");
         }
@@ -711,7 +715,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         beam.EndPos.Z = endPos.Z;
         beam.DispatchSpawn();
 
-        AddTimer(life, () => { beam.Remove(); }); // destroy beam after specific time
+        AddTimer(life, () => {if(beam != null && beam.IsValid) beam.Remove(); }); // destroy beam after specific time
 
         return ((int)beam.Index, beam);
     }
