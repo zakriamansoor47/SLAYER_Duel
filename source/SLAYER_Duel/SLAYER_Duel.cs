@@ -144,9 +144,10 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
         {
-            if(!Config.PluginEnabled || @event.Userid == null || !@event.Userid.IsValid)return HookResult.Continue;
+            var player = @event.Userid;
+            if(!Config.PluginEnabled || player == null || !player.IsValid)return HookResult.Continue;
             // Kill player if he spawn during duel
-            if(g_PrepDuel || g_DuelStarted)@event.Userid.PlayerPawn.Value.CommitSuicide(false, true);
+            if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
             return HookResult.Continue;
         });
         RegisterEventHandler<EventRoundEnd>((@event, info) =>
