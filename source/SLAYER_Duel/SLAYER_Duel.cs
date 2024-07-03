@@ -62,7 +62,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.6.1";
+    public override string ModuleVersion => "1.6.2";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -441,7 +441,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         
         mp_death_drop_gun_value = mp_death_drop_gun.GetPrimitiveValue<int>(); // Get Convar Int value
         if(mp_death_drop_gun_value != 0)Server.ExecuteCommand("mp_death_drop_gun 0");
-        Server.ExecuteCommand("mp_ignore_round_win_conditions 1"); // Duel don't end (if duel is already started) when round timer ends
+        //Server.ExecuteCommand("mp_ignore_round_win_conditions 1"); // Duel don't end (if duel is already started) when round timer ends
 
         foreach(var cmd in Commands.Where(commands => commands != "")) // Execute Duel Start Commands
         {
@@ -519,12 +519,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         g_PrepDuel = false;
         g_DuelStarted = false;
         if(t_DuelTimer != null)t_DuelTimer?.Kill();
+        /*CCSGameRules gameRules = GetGameRules();
+        if(Winner != "" && !IsCTWon)gameRules.TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.TerroristsEscaped);
+        else if(Winner != "" && IsCTWon)gameRules.TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.CTsPreventEscape);
+        else if(Winner == "")gameRules.TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.RoundDraw);
         
-        if(Winner != "" && !IsCTWon)TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.TerroristsEscaped);
-        else if(Winner != "" && IsCTWon)TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.CTsPreventEscape);
-        else if(Winner == "")TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.RoundDraw);
-        
-        Server.ExecuteCommand("mp_ignore_round_win_conditions 0");
+        Server.ExecuteCommand("mp_ignore_round_win_conditions 0");*/
     }
     private DuelModeSettings GetDuelItem(string DuelModeName)
     {
@@ -865,8 +865,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     private void FreezePlayer(CCSPlayerController? player)
     {
         if(player == null || !player.IsValid)return;
-        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_NONE;
-        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 0); // freeze
+        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_OBSOLETE;
+        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 1); // freeze
         Utilities.SetStateChanged(player.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
         player.PlayerPawn.Value.TakesDamage = false;
     }
@@ -894,7 +894,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             activeWeaponHandle.Value.ReserveAmmo[0] = 100;
         }
-    }
+    }/*
     public Action<IntPtr, float, RoundEndReason, nint, uint> TerminateRoundWindows = TerminateRoundWindowsFunc.Invoke;
 	public static MemoryFunctionVoid<nint, float, RoundEndReason, nint, uint> TerminateRoundWindowsFunc = new(GameData.GetSignature("CCSGameRules_TerminateRound"));
     // For linux users
@@ -907,5 +907,5 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             TerminateRoundWindows(gamerules.Handle, delay, roundEndReason, 0, 0);
         else
             TerminateRoundLinux(gamerules.Handle, roundEndReason, 0, 0, delay);
-    }
+    }*/
 }
