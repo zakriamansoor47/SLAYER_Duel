@@ -46,19 +46,28 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
 
 **17.** You can Enable/Disable Infinite Ammo in Duel. Infinite Clip and Reserve Ammo
 
+**18.** The duel winner can get extra (health, speed, money) in the next round after the duel.
+
+**19.** Players can set their Duel Vote Choice by `!duel` command
+
+**20.** And much more
+
+
 ## Commands:
+`!duel` - To set Duel Vote Choice every time (For all players)
 `!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
 
-## TO DO:
-**1.** ~~Add the ability to Disable the Knife Damage in Duel Modes. (By disabling Knife damage you can still able to swap weapons or run fast. Best for the modes like AWP+Noscope)~~
 
 ## Configuration:
 ```
 {
   "PluginEnabled": true,          // Enable/Disable Plugin
-  "Duel_ForceStart": true,        // Force Start Duel? (true = Yes, false = Vote for Duel)
+  "Duel_ForceStart": false,       // Force Start Duel? (true = Yes, false = Vote for Duel)
   "Duel_ShowMenuInCenter": true,  // Location of Duel Voting Menu? (true = Center, false = Chat)
   "Duel_DrawLaserBeam": true,     // Draw a Laser Beam Between Players to find each other if they are Far from Each other. 
+  "Duel_WinnerExtraHealth": 10,	  // The amount of extra health to give the winner for the next round only. (0 = no extra health)
+  "Duel_WinnerExtraSpeed": 0.2,	  // The amount of extra speed given to the winner for the next round only. (0.0 = no extra speed)
+  "Duel_WinnerExtraMoney": 1000,  // The amount of extra money to give the winner for the next round only. (0 = no extra money)
   "Duel_Time": 30,                // Duel Time
   "Duel_PrepTime": 3,             // Duel Preperation Time
   "Duel_MinPlayers": 3,           // Minimum Players needed on Server to Start Duel (3 - is the minimum Value, otherwise duel won't start)
@@ -69,6 +78,7 @@ This Plugin Allow Players to do **1vs1 Duel**. This plugin has many features. Th
   "Duel_BotAcceptDuel": true,     // Bot do Duel with Player? (true = Yes, false = No)
   "Duel_BotsDoDuel": true,        // Bots do Duel with each other? (true = Yes, false = No)
   "Duel_DuelSoundPath": "",       // Path of the Duel Sound which will play on Duel Start? NOTE: Please Use a very short sound cause there is no way to stop the sound if Duel Ends. ("" = Disabled)
+  "Duel_ChangeDuelTime": false,   // False = Extend Round if round time end during duel | True = During Duel Preparation Change Duel time according to round time left if round time is less than Duel Time
   "Duel_Modes": [
     // Example Duel Mode
     //{
