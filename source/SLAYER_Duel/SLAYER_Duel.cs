@@ -120,33 +120,36 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     {
         _connection = new SqliteConnection($"Data Source={Path.Join(ModuleDirectory, "Database/SLAYER_Duel.db")}");
         _connection.Open();
-        foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
+        if(hotReload)
         {
-            var steamId = player.AuthorizedSteamID?.SteamId64;
-            PlayerOption[player.Slot] = -1; // Default Option
-            // Run in a separate thread to avoid blocking the main thread
-            Task.Run(async () =>
+            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
             {
-                try
+                var steamId = player.AuthorizedSteamID?.SteamId64;
+                PlayerOption[player.Slot] = -1; // Default Option
+                // Run in a separate thread to avoid blocking the main thread
+                Task.Run(async () =>
                 {
-                    var result = await _connection.QueryFirstOrDefaultAsync(@"SELECT `option` FROM `SLAYER_Duel` WHERE `steamid` = @SteamId;",
-                    new
+                    try
                     {
-                        SteamId = steamId
-                    });
+                        var result = await _connection.QueryFirstOrDefaultAsync(@"SELECT `option` FROM `SLAYER_Duel` WHERE `steamid` = @SteamId;",
+                        new
+                        {
+                            SteamId = steamId
+                        });
 
-                    // So we use `Server.NextFrame` to run it on the next game tick.
-                    Server.NextFrame(() => 
+                        // So we use `Server.NextFrame` to run it on the next game tick.
+                        Server.NextFrame(() => 
+                        {
+                            PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? 0}");
+                        });
+                    }
+                    catch (Exception ex)
                     {
-                        PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? 0}");
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                    Logger.LogError($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                }
-            });
+                        Console.WriteLine($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
+                        Logger.LogError($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
+                    }
+                });
+            }
         }
         Task.Run(async () =>
         {
