@@ -17,6 +17,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
+using SQLitePCL;
 
 namespace SLAYER_Duel;
 // Used these to remove compile warnings
@@ -68,7 +69,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.6.4";
+    public override string ModuleVersion => "1.7.1";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -140,7 +141,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                         // So we use `Server.NextFrame` to run it on the next game tick.
                         Server.NextFrame(() => 
                         {
-                            PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? 0}");
+                            PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? -1}");
                         });
                     }
                     catch (Exception ex)
@@ -189,8 +190,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerConnectFull>((@event, info) =>
         {
+            if(!Config.PluginEnabled || @event.Userid == null || !@event.Userid.IsValid)return HookResult.Continue;
+            
             var player = @event.Userid;
-            if(!Config.PluginEnabled || player == null || !player.IsValid)return HookResult.Continue;
             var steamId = player.AuthorizedSteamID?.SteamId64;
             
             PlayerOption[player.Slot] = -1; // Default Option
@@ -208,7 +210,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                     // So we use `Server.NextFrame` to run it on the next game tick.
                     Server.NextFrame(() => 
                     {
-                        PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? 0}");
+                        PlayerOption[player.Slot] = Convert.ToInt32($"{result?.option ?? -1}");
                     });
                 }
                 catch (Exception ex)
@@ -219,8 +221,17 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             });
             return HookResult.Continue;
         });
+        AddCommandListener("jointeam", (player, commandInfo) =>     // Ban Team Switch during duel for duelist
+        {
+            if(Config.PluginEnabled && player != null && player.IsValid && player == Duelist[0] || player == Duelist[1])
+            {
+                return HookResult.Handled;
+            }
+            return HookResult.Continue;
+        });
         RegisterEventHandler<EventRoundStart>((@event, info) =>
         {
+            Duelist = new CCSPlayerController[2];
             g_PrepDuel = false;
             g_DuelStarted = false;
             g_IsDuelPossible = false;
@@ -230,8 +241,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
         {
+            if(!Config.PluginEnabled || @event.Userid == null || !@event.Userid.IsValid)return HookResult.Continue;
+
             var player = @event.Userid;
-            if(!Config.PluginEnabled || player == null || !player.IsValid)return HookResult.Continue;
             // Kill player if he spawn during duel
             if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
 
@@ -456,6 +468,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             return HookResult.Continue;
         }, HookMode.Post);
     }
+    
     private void AcceptDuelVoteOption(CCSPlayerController player, ChatMenuOption option)
     {
         if (player == null || player.IsValid == false || player.IsBot == true || !g_IsDuelPossible || g_BombPlanted)return;
@@ -707,6 +720,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             else if(Winner != "" && IsCTWon){TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.CTsWin);AddTeamScore(3);}
             else if(Winner == ""){TerminateRound(ConVar.Find("mp_round_restart_delay").GetPrimitiveValue<float>(), RoundEndReason.RoundDraw);}
         }
+
+        Duelist = new CCSPlayerController[2]; // reset duelist
     }
     private DuelModeSettings GetDuelItem(string DuelModeName)
     {
