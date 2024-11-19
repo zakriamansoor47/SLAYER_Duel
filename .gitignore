@@ -1,0 +1,3 @@
+# Ignore build and output directories inside source/SLAYER_Duel
+source/SLAYER_Duel/bin/
+source/SLAYER_Duel/obj/
