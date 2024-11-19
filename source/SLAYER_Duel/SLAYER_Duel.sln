@@ -5,7 +5,7 @@ VisualStudioVersion = 17.5.002.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "source", "source", "{72ABD7E3-ACBB-416C-BBF1-8AAA02812E01}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SLAYER_Duel", "source\SLAYER_Duel\SLAYER_Duel.csproj", "{413BE079-F1F4-41DB-A9CD-FC7159332C93}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SLAYER_Duel", "SLAYER_Duel.csproj", "{413BE079-F1F4-41DB-A9CD-FC7159332C93}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
