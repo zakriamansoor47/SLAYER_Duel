@@ -1,3 +1,29 @@
 # Ignore build and output directories inside source/SLAYER_Duel
 source/SLAYER_Duel/bin/
 source/SLAYER_Duel/obj/
+
+# Ignore build output directories
+bin/
+obj/
+
+# Ignore user-specific files
+.vs/
+.idea/
+.vscode/
+
+# Ignore OS-generated files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+*.log
+*.tmp
+
+# Ignore JetBrains Rider project files
+.idea/
+
+# Ignore Visual Studio for Mac and Linux specific files
+.vscode/
+
+# User-specific IDE settings (optional)
+.vsconfig
