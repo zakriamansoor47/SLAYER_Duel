@@ -72,7 +72,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.8";
+    public override string ModuleVersion => "1.8.1";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -124,6 +124,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public KitsuneMenu kitsuneMenu { get; private set; } = null!;
     public override void Load(bool hotReload)
     {
+        PlayerBeaconTimer?.Clear();
         _connection = new SqliteConnection($"Data Source={Path.Join(ModuleDirectory, "Database/SLAYER_Duel.db")}");
         _connection.Open();
         if(hotReload)
@@ -260,9 +261,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
         {
-            if(!Config.PluginEnabled || @event.Userid == null || !@event.Userid.IsValid)return HookResult.Continue;
-
             var player = @event.Userid;
+            if(!Config.PluginEnabled || player == null || !player.IsValid || player.PlayerPawn.Value == null)return HookResult.Continue;
+
             // Kill player if he spawn during duel
             if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
 
@@ -316,7 +317,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         });
         RegisterEventHandler<EventGrenadeThrown>((@event, info) =>
         {
-        var player = @event.Userid;
+            var player = @event.Userid;
             if(!Config.PluginEnabled || !g_DuelStarted || player == null || !player.IsValid)return HookResult.Continue;
             if(GetDuelItem(SelectedDuelModeName).InfiniteAmmo < 1)return HookResult.Continue;
 
