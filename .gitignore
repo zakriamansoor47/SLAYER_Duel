@@ -1,29 +1,61 @@
-# Ignore build and output directories inside source/SLAYER_Duel
-source/SLAYER_Duel/bin/
-source/SLAYER_Duel/obj/
+# Folders
+.build/
+.vanish/
 
-# Ignore build output directories
+# SourcePawn
+*.smx
+
+# Others
+*.exe
+*.dat
+*.bat
+*.zip
+
+### VisualStudioCode ###
+.vscode/
+.vs/
+*.code-workspace
+
+# Local History for Visual Studio Code
+.history/
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
+.ionide
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Dump file
+*.stackdump
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# macOS-specific files and directories to ignore
+.DS_Store
+.AppleDouble/
+__MACOSX/
+
+# Remove dotnet normal build
 bin/
 obj/
-
-# Ignore user-specific files
-.vs/
-.idea/
-.vscode/
-
-# Ignore OS-generated files
-.DS_Store
-Thumbs.db
-
-# Ignore temporary files
-*.log
-*.tmp
-
-# Ignore JetBrains Rider project files
-.idea/
-
-# Ignore Visual Studio for Mac and Linux specific files
-.vscode/
-
-# User-specific IDE settings (optional)
-.vsconfig
+*.sln
