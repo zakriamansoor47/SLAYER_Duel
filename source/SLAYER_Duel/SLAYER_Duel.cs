@@ -287,6 +287,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
                     MenuManager.CloseActiveMenu(player);
+                    kitsuneMenu.ClearMenus(player);
                 }
             }
             g_PrepDuel = false;
@@ -365,6 +366,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
                     MenuManager.CloseActiveMenu(player);
+                    kitsuneMenu.ClearMenus(player);
                 }
             }
             return HookResult.Continue;
@@ -386,6 +388,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
                     MenuManager.CloseActiveMenu(player);
+                    kitsuneMenu.ClearMenus(player);
                 }
             }
             return HookResult.Continue;
