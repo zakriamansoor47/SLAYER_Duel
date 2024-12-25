@@ -62,7 +62,7 @@ This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. T
 
 
 ## Configuration:
-```
+```json
 {
   "PluginEnabled": true,          		// Enable/Disable Plugin
   "Duel_ForceStart": false,       		// Force Start Duel? (true = Yes, false = Vote for Duel)
