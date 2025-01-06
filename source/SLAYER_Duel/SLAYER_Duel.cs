@@ -35,6 +35,7 @@ public class SLAYER_DuelConfig : BasePluginConfig
     [JsonPropertyName("PluginEnabled")] public bool PluginEnabled { get; set; } = true;
     [JsonPropertyName("Duel_ForceStart")] public bool Duel_ForceStart { get; set; } = false;
     [JsonPropertyName("Duel_ShowMenuAt")] public int Duel_ShowMenuAt { get; set; } = 3;
+    [JsonPropertyName("Duel_ShowDuelCounterIn")] public int Duel_ShowDuelCounterIn { get; set; } = 1;
     [JsonPropertyName("Duel_FreezePlayerOnMenuShown")] public bool Duel_FreezePlayerOnMenuShown { get; set; } = true;
     [JsonPropertyName("Duel_DrawLaserBeam")] public bool Duel_DrawLaserBeam { get; set; } = true;
     [JsonPropertyName("Duel_BotAcceptDuel")] public bool Duel_BotAcceptDuel { get; set; } = true;
@@ -90,10 +91,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         return Config.Duel_Modes.FirstOrDefault(mode => comparer.Equals(mode.Name, modeName));
     }
     private SqliteConnection _connection = null!;
-    // Create a Dictionary to store weapons for each player by player id
+
+    Dictionary<CCSPlayerController, int> PlayerOption = new Dictionary<CCSPlayerController, int>();
     Dictionary<string, List<string>> playerSavedWeapons = new Dictionary<string, List<string>>();
     List<int> LastDuelNums = new List<int>();
     Dictionary<string, Dictionary<string, string>> Duel_Positions = new Dictionary<string, Dictionary<string, string>>();
+
     public bool[] g_Zoom = new bool[64];
     public bool g_BombPlanted = false;
     public bool g_DuelStarted = false;
@@ -108,8 +111,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public float g_PrepTime;
     public float g_DuelTime;
     public int SelectedMode;
-    //public int[] PlayerOption = new int[64];
-    Dictionary<CCSPlayerController, int> PlayerOption = new Dictionary<CCSPlayerController, int>();
     public CCSPlayerController[] Duelist = new CCSPlayerController[2];
     public string SelectedDuelModeName = "";
     public string DuelWinner = "";
@@ -182,19 +183,41 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             {
                 if(g_PrepDuel)
                 {
-                    player.PrintToCenterHtml
-                    (
-                        $"{Localizer["CenterHtml.DuelPrep"]}" +
-                        $"{Localizer["CenterHtml.DuelPrepTime", g_PrepTime]}"
-                    );
+                    if(Config.Duel_ShowDuelCounterIn == 1)
+                    {
+                        player.PrintToCenterHtml
+                        (
+                            $"{Localizer["CenterHtml.DuelPrep"]}" +
+                            $"{Localizer["CenterHtml.DuelPrepTime", g_PrepTime]}"
+                        );
+                    }
+                    else
+                    {
+                        player.PrintToCenterAlert
+                        (
+                            $"{Localizer["CenterAlert.DuelPrep"]}" +
+                            $"{Localizer["CenterAlert.DuelPrepTime", g_PrepTime]}"
+                        );
+                    }
                 }
                 if(g_DuelStarted)
                 {
-                    player.PrintToCenterHtml
-                    (
-                        $"{Localizer["CenterHtml.DuelEnd"]}" +
-                        $"{Localizer["CenterHtml.DuelEndTime", g_DuelTime]}"
-                    );
+                    if(Config.Duel_ShowDuelCounterIn == 1)
+                    {
+                        player.PrintToCenterHtml
+                        (
+                            $"{Localizer["CenterHtml.DuelEnd"]}" +
+                            $"{Localizer["CenterHtml.DuelEndTime", g_DuelTime]}"
+                        );
+                    }
+                    else
+                    {
+                        player.PrintToCenterAlert
+                        (
+                            $"{Localizer["CenterAlert.DuelEnd"]}" +
+                            $"{Localizer["CenterAlert.DuelEndTime", g_DuelTime]}"
+                        );
+                    }
                     if(g_DuelNoscope && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE)OnTick(player);
                 }
                 
@@ -628,7 +651,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                     {
                         if(!player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE || !g_DuelStarted && !g_PrepDuel)
                         {
-                            if(PlayerBeaconTimer?[player] != null)PlayerBeaconTimer?[player]?.Kill(); // Kill Timer if player die or leave
+                            if(PlayerBeaconTimer != null && PlayerBeaconTimer.ContainsKey(player) &&  PlayerBeaconTimer?[player] != null)PlayerBeaconTimer?[player]?.Kill(); // Kill Timer if player die or leave
                         } 
                         else DrawBeaconOnPlayer(player);
                     }, TimerFlags.REPEAT);

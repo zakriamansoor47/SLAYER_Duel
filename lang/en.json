@@ -31,5 +31,9 @@
     "CenterHtml.DuelPrep":                      "<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>Duel will Start in:</font><font color='red'> |:.</font><br>",
     "CenterHtml.DuelPrepTime":                  "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}s</font> <font color='green'>◄</font><br>",
     "CenterHtml.DuelEnd":                       "<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>The Duel will End in:</font><font color='red'> |:.</font><br>",
-    "CenterHtml.DuelEndTime":                   "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}s</font> <font color='green'>◄</font><br>"
+    "CenterHtml.DuelEndTime":                   "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}s</font> <font color='green'>◄</font><br>",
+    "CenterAlert.DuelPrep":                     ".:| Duel will Start in: |:.",
+    "CenterAlert.DuelPrepTime":                 "► {0:n0}s ◄",
+    "CenterAlert.DuelEnd":                      ".:| The Duel will End in: |:.",
+    "CenterAlert.DuelEndTime":                  "► {0:n0}s ◄"
 }
