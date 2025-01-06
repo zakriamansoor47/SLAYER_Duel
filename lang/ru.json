@@ -31,5 +31,9 @@
     "CenterHtml.DuelPrep":                      "<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>Дуэль начнется через:</font><font color='red'> |:.</font><br>",
     "CenterHtml.DuelPrepTime":                  "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}сек</font> <font color='green'>◄</font><br>",
     "CenterHtml.DuelEnd":                       "<font color='red'>.:| </font> <font class='fontSize-l' color='lime'>Дуэль окончится через:</font><font color='red'> |:.</font><br>",
-    "CenterHtml.DuelEndTime":                   "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}сек</font> <font color='green'>◄</font><br>"
+    "CenterHtml.DuelEndTime":                   "<font color='green'>►</font> <font class='fontSize-m' color='red'>{0:n0}сек</font> <font color='green'>◄</font><br>",
+    "CenterAlert.DuelPrep":                     ".:| Дуэль начнется через: |:.",
+    "CenterAlert.DuelPrepTime":                 "► {0:n0}сек ◄",
+    "CenterAlert.DuelEnd":                      ".:| Дуэль окончится через: |:.",
+    "CenterAlert.DuelEndTime":                  "► {0:n0}сек ◄"
 }

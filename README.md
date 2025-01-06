@@ -67,6 +67,7 @@ This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. T
   "PluginEnabled": true,          		// Enable/Disable Plugin
   "Duel_ForceStart": false,       		// Force Start Duel? (true = Yes, false = Vote for Duel)
   "Duel_ShowMenuAt": 3,  		  		// Location of Duel Voting Menu? (1 = Chat, 2 = Center Html, 3 = Center WASD Menu)
+  "Duel_ShowDuelCounterIn": 1,  		// Location of Duel Start Counter? (1 = Center HTML, 2 = Center Alert)
   "Duel_FreezePlayerOnMenuShown": true, // FreezePlayerOnMenuShown? (true = Freeze, false = Don't Freeze)
   "Duel_DrawLaserBeam": true,     		// Draw a Laser Beam Between Players to find each other if they are Far from Each other. 
   "Duel_WinnerExtraHealth": 10,	  		// The amount of extra health to give the winner for the next round only. (0 = no extra health)
