@@ -1,5 +1,6 @@
 # Accepting Paid Request! Discord: Slayer47#7002
-# Donate: If you like my work, you can donate to me via [Steam Trade Offer](https://bit.ly/3qDpgPd)
+# Donation
+<a href="https://www.buymeacoffee.com/slayer47" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
 ## Description:
 This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. The main feature is that you can your own **Custom Duel Mode** from **JSON** file Easily.
@@ -61,7 +62,7 @@ This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. T
 
 
 ## Configuration:
-```
+```json
 {
   "PluginEnabled": true,          		// Enable/Disable Plugin
   "Duel_ForceStart": false,       		// Force Start Duel? (true = Yes, false = Vote for Duel)
