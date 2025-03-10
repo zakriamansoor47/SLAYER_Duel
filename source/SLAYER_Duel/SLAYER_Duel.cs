@@ -21,6 +21,7 @@ using System.Runtime.InteropServices;
 // kitsune Menu
 using Menu;
 using Menu.Enums;
+using CounterStrikeSharp.API.Modules.Entities;
 
 namespace SLAYER_Duel;
 // Used these to remove compile warnings
@@ -73,7 +74,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.8.5";
+    public override string ModuleVersion => "1.8.6";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -93,6 +94,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     private SqliteConnection _connection = null!;
 
     Dictionary<CCSPlayerController, int> PlayerOption = new Dictionary<CCSPlayerController, int>();
+    Dictionary<CCSPlayerController, bool> PlayerRescuingHostage = new Dictionary<CCSPlayerController, bool>();
     Dictionary<string, List<string>> playerSavedWeapons = new Dictionary<string, List<string>>();
     List<int> LastDuelNums = new List<int>();
     Dictionary<string, Dictionary<string, string>> Duel_Positions = new Dictionary<string, Dictionary<string, string>>();
@@ -105,7 +107,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public bool g_DuelHSOnly = false;
     public bool g_DuelDisableKnife = false;
     public bool g_DuelBullettracers = false;
-    public bool g_IsDuelPossible = false;
+    public bool g_IsDuelPossible = true;
     public bool g_IsVoteStarted = false;
     public bool[] PlayersDuelVoteOption = new bool[2];
     public float g_PrepTime;
@@ -126,6 +128,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public override void Load(bool hotReload)
     {
         PlayerBeaconTimer?.Clear();
+        PlayerRescuingHostage?.Clear();
         _connection = new SqliteConnection($"Data Source={Path.Join(ModuleDirectory, "Database/SLAYER_Duel.db")}");
         _connection.Open();
         if(hotReload)
@@ -175,6 +178,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(t_PrepDuel != null)t_PrepDuel.Kill();
             if(t_DuelTimer != null)t_DuelTimer.Kill();
             PlayerBeaconTimer?.Clear();
+            PlayerRescuingHostage?.Clear();
         });
         RegisterListener<Listeners.OnTick>(() =>
         {
@@ -270,7 +274,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Duelist = new CCSPlayerController[2];
             g_PrepDuel = false;
             g_DuelStarted = false;
-            g_IsDuelPossible = false;
+            g_IsDuelPossible = true;
             g_IsVoteStarted = false;
             g_BombPlanted = false;
             if(t_PrepDuel != null)t_PrepDuel.Kill();
@@ -280,6 +284,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 if(timer != null)timer.Kill();
             }
             PlayerBeaconTimer?.Clear();
+            PlayerRescuingHostage?.Clear();
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
@@ -288,7 +293,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(!Config.PluginEnabled || player == null || !player.IsValid || player.PlayerPawn.Value == null)return HookResult.Continue;
 
             // Kill player if he spawn during duel
-            if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
+            //if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
 
             if(DuelWinner != "" && $"{player.AuthorizedSteamID?.SteamId64}" == DuelWinner) // Duel Winner
             {
@@ -307,7 +312,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             if(g_IsVoteStarted) 
             {
-                foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
+                foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
                     MenuManager.CloseActiveMenu(player);
                     kitsuneMenu.ClearMenus(player);
@@ -317,8 +322,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             g_DuelStarted = false;
             g_IsDuelPossible = false;
             g_IsVoteStarted = false;
-            g_BombPlanted = false;
             if(t_PrepDuel != null)t_PrepDuel.Kill();
+            Duelist = new CCSPlayerController[2];
             Server.ExecuteCommand("mp_default_team_winner_no_objective -1"); // Set to default after duel
 
             return HookResult.Continue;
@@ -377,28 +382,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             }
             return HookResult.Continue;
         });
-        RegisterEventHandler<EventBombBeginplant>((@event, info) =>
-        {
-            g_BombPlanted = true;
-            if(!g_DuelStarted)
-            {
-                g_IsDuelPossible = false;
-            }
-            if(g_IsVoteStarted) 
-            {
-                foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
-                {
-                    MenuManager.CloseActiveMenu(player);
-                    kitsuneMenu.ClearMenus(player);
-                }
-            }
-            return HookResult.Continue;
-        });
-        RegisterEventHandler<EventBombAbortplant>((@event, info) =>
-        {
-            g_BombPlanted = false;
-            return HookResult.Continue;
-        });
         RegisterEventHandler<EventBombPlanted>((@event, info) =>
         {
             g_BombPlanted = true;
@@ -408,7 +391,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             }
             if(g_IsVoteStarted) 
             {
-                foreach (var player in Duelist.Where(player => player != null && player.Connected == PlayerConnectedState.PlayerConnected))
+                foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
                     MenuManager.CloseActiveMenu(player);
                     kitsuneMenu.ClearMenus(player);
@@ -416,22 +399,59 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             }
             return HookResult.Continue;
         });
+        RegisterEventHandler<EventBombExploded>((@event, info) =>
+        {
+            g_BombPlanted = true;
+            if(!g_DuelStarted)
+            {
+                g_IsDuelPossible = false;
+            }
+            if(g_IsVoteStarted) 
+            {
+                foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
+                {
+                    MenuManager.CloseActiveMenu(player);
+                    kitsuneMenu.ClearMenus(player);
+                }
+            }
+            return HookResult.Continue;
+        });
+        RegisterEventHandler<EventHostageFollows>((@event, info) =>
+        {
+            var player = @event.Userid;
+            if(player == null || !player.IsValid)return HookResult.Continue;
+
+            Server.PrintToChatAll($"EventHostageFollows");
+            Server.PrintToChatAll($"{player.PlayerName} | {player.TeamNum} | {@event.Hostage}");
+
+            PlayerRescuingHostage[player] = true; // Set Player is Rescuing Hostage
+
+            return HookResult.Continue;
+        });
+        RegisterEventHandler<EventHostageRescued>((@event, info) =>
+        {
+            var player = @event.Userid;
+            if(player == null || !player.IsValid)return HookResult.Continue;
+
+            PlayerRescuingHostage[player] = false; // Set Player is not Rescuing Hostage
+
+            return HookResult.Continue;
+        });
         RegisterEventHandler<EventPlayerDeath>((@event, info) =>
         {
             if(!Config.PluginEnabled || g_BombPlanted)return HookResult.Continue; // Plugin should be Enable
             int ctplayer = 0, tplayer = 0, totalplayers = 0;
             // Count Players in Both Team on Any Player Death
-            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && !player.ControllingBot))
+            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && !player.ControllingBot && (!PlayerRescuingHostage.ContainsKey(player) || PlayerRescuingHostage[player] == false)))
             {
                 if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 2)tplayer++;
                 if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 3)ctplayer++;
-                if(g_DuelStarted)player.RemoveWeapons();
+                //if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && g_DuelStarted)player.RemoveWeapons();
                 totalplayers++;
             }
-            if(Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1)g_IsDuelPossible = true;
-            else g_IsDuelPossible = false;
             CCSGameRules gamerules = GetGameRules();
-            if(!gamerules.WarmupPeriod && g_IsDuelPossible) // 1vs1 Situation and its not warmup
+            if(!g_IsDuelPossible)return HookResult.Continue;
+            if(!gamerules.WarmupPeriod && Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1) // 1vs1 Situation and its not warmup
             {
                 if(Config.Duel_ForceStart) // If Force Start Duel is true
                 {
@@ -545,7 +565,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     
     private void AcceptDuelVoteOption(CCSPlayerController player, ChatMenuOption? option)
     {
-        if (player == null || player.IsValid == false || player.IsBot == true || !g_IsDuelPossible || g_BombPlanted)return;
+        if (player == null || !player.IsValid || player.IsBot || !g_IsDuelPossible || g_BombPlanted || !g_IsVoteStarted || !Duelist.Contains(player))return;
         
         if(player.TeamNum == 2)
         {
@@ -569,7 +589,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     }
     private void DeclineDuelVoteOption(CCSPlayerController player, ChatMenuOption? option)
     {
-        if (player == null || player.IsValid == false || player.IsBot == true || !g_IsDuelPossible || g_BombPlanted)return;
+        if (player == null || player.IsValid == false || player.IsBot == true || !g_IsDuelPossible || g_BombPlanted || !g_IsVoteStarted || !Duelist.Contains(player))return;
         
         if(player.TeamNum == 2)
         {
@@ -603,29 +623,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             Server.PrintToConsole($"[SLAYER Duel] Error on Removing Weapon: {ex.Message}");
         }
     }
-    public void PrepDuelTimer()
-    {
-        if (g_PrepTime <= 0.0f)
-        {
-            if(g_IsDuelPossible)
-            {
-                var SelectedModeName = Config.Duel_Modes.ElementAt(SelectedMode);
-                SelectedDuelModeName = SelectedModeName.Name;
-                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-                Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.Started", SelectedModeName.Name]}");
-                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-                StartDuel(SelectedModeName.Name);
-                g_PrepDuel = false;
-                g_DuelStarted = true;
-                g_IsVoteStarted = false;
-                t_DuelTimer = AddTimer(0.2f, DuelStartedTimer, TimerFlags.REPEAT); 
-            }
-            t_PrepDuel?.Kill();
-            return;
-        }
-        CreateLaserBeamBetweenPlayers(0.2f); // Create Laser Beam
-        g_PrepTime = g_PrepTime - 0.2f;
-    }
+    
     public void PrepDuel()
     {
         if(g_PrepDuel)return;
@@ -649,9 +647,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                     // Start Beacon
                     PlayerBeaconTimer[player] = AddTimer(1.0f, ()=>
                     {
-                        if(!player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE || !g_DuelStarted && !g_PrepDuel)
+                        if(player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE || !g_DuelStarted && !g_PrepDuel)
                         {
-                            if(PlayerBeaconTimer != null && PlayerBeaconTimer.ContainsKey(player) &&  PlayerBeaconTimer?[player] != null)PlayerBeaconTimer?[player]?.Kill(); // Kill Timer if player die or leave
+                            if(PlayerBeaconTimer != null && PlayerBeaconTimer.ContainsKey(player) &&  PlayerBeaconTimer?[player] != null)PlayerBeaconTimer?[player]?.Kill(); // Kill Timer if player dies or leaves
                         } 
                         else DrawBeaconOnPlayer(player);
                     }, TimerFlags.REPEAT);
@@ -676,6 +674,28 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         Server.ExecuteCommand("mp_buytime 0"); // Disable BuyZone during Duel
 
         t_PrepDuel = AddTimer(0.2f, PrepDuelTimer, TimerFlags.REPEAT); // start Duel Prepration Timer
+    }
+    public void PrepDuelTimer()
+    {
+        if (g_PrepTime <= 0.0f)
+        {
+            if(g_IsDuelPossible)
+            {
+                var SelectedModeName = Config.Duel_Modes.ElementAt(SelectedMode);
+                SelectedDuelModeName = SelectedModeName.Name;
+                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+                Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.Started", SelectedModeName.Name]}");
+                Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+                StartDuel(SelectedModeName.Name);
+                g_PrepDuel = false;
+                g_DuelStarted = true;
+                t_DuelTimer = AddTimer(0.2f, DuelStartedTimer, TimerFlags.REPEAT); 
+            }
+            t_PrepDuel?.Kill();
+            return;
+        }
+        CreateLaserBeamBetweenPlayers(0.2f); // Create Laser Beam
+        g_PrepTime = g_PrepTime - 0.2f;
     }
     public void StartDuel(string DuelModeName)
     {
@@ -731,49 +751,57 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         g_IsDuelPossible = false;
         string Winner = "";
         bool IsCTWon = false;
+        g_PrepDuel = false;
+        g_DuelStarted = false;
+        if(t_DuelTimer != null)t_DuelTimer?.Kill();
         CCSPlayerController? CT = null, T = null;
-        int THealth = 0, CTHealth = 0;
+        int CTHealth = 0, THealth = 0;
+        Random randomplayer = new Random();
+        int killplayer = randomplayer.Next(0,2);
         
-        foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.TeamNum > 0))
+        foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.TeamNum > 0 && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && g_DuelTime <= 0f))
         {
-            if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE) // Check Alive Players After Duel
+            if(Config.Duel_DrawPunish == 1) // Kill Both if timer ends
             {
-                if(Config.Duel_DrawPunish == 1) // Kill Both if timer ends
+                Server.NextFrame(() => player.PlayerPawn.Value.CommitSuicide(false, true));
+            }
+            else if(Config.Duel_DrawPunish == 2) // Kill Random if timer ends
+            {
+                if(killplayer == 0 && player.TeamNum == 2){Server.NextFrame(() => player.PlayerPawn.Value.CommitSuicide(false, true));}
+                else if(killplayer == 1 && player.TeamNum == 3){Server.NextFrame(() => player.PlayerPawn.Value.CommitSuicide(false, true));}
+            }
+            else if(Config.Duel_DrawPunish == 3) // Kill who has minimum HP if timer ends
+            {
+                if(player.TeamNum == 2){THealth = player.PlayerPawn.Value.Health;T = player;} // save T player
+                if(player.TeamNum == 3){CTHealth = player.PlayerPawn.Value.Health;CT = player;} // save CT player
+                if(CT != null && T != null && CT.IsValid && T.IsValid && CT.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && T.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE)
                 {
-                    player.PlayerPawn.Value.CommitSuicide(false, true);
-                }
-                else if(Config.Duel_DrawPunish == 2) // Kill Random if timer ends
-                {
-                    Random randomplayer = new Random();
-                    int killplayer = randomplayer.Next(0,2);
-                    if(killplayer == 0 && player.TeamNum == 2){player.PlayerPawn.Value.CommitSuicide(false, true);}
-                    else if(killplayer == 1 && player.TeamNum == 3){player.PlayerPawn.Value.CommitSuicide(false, true);}
-                }
-                else if(Config.Duel_DrawPunish == 3) // Kill who has minimum HP if timer ends
-                {
-                    if(player.TeamNum == 2){THealth = player.PlayerPawn.Value.Health;T = player;}
-                    if(player.TeamNum == 3){CTHealth = player.PlayerPawn.Value.Health;CT = player;}
-                    if(CT != null && T != null && CT.IsValid && T.IsValid)
+                    if(CTHealth < THealth){Server.NextFrame(() => CT.PlayerPawn.Value.CommitSuicide(false, true));} 
+                    else if(CTHealth > THealth){Server.NextFrame(() => T.PlayerPawn.Value.CommitSuicide(false, true));}
+                    else if(CTHealth == THealth) // if no damage given then kill both
                     {
-                        if(CTHealth < THealth){CT.PlayerPawn.Value.CommitSuicide(false, true);} // Give Back Saved Weapons to player
-                        else if(CTHealth > THealth){T.PlayerPawn.Value.CommitSuicide(false, true);} // Give Back Saved Weapons to player
-                        else if(CTHealth == THealth) // if no damage given then kill both
-                        {
-                            CT.PlayerPawn.Value.CommitSuicide(false, true);
-                            T.PlayerPawn.Value.CommitSuicide(false, true);
-                        };
+                        Server.NextFrame(() => CT.PlayerPawn.Value.CommitSuicide(false, true));
+                        Server.NextFrame(() => T.PlayerPawn.Value.CommitSuicide(false, true));
                     }
                 }
-                if(Winner == "")
-                {
-                    Winner = player.PlayerName;  // Save the name of the alive Player
-                    DuelWinner = $"{player.AuthorizedSteamID?.SteamId64}";
-                    IsCTWon = player.TeamNum == 3 ? true : false;
-                }
-                else Winner = ""; // If Winner is already saved its mean 2 players are alived after the Duel. Then remove the Winner.
-                GiveBackSavedWeaponsToPlayers(player);
             }
         }
+        foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.TeamNum > 0 && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
+        {
+            if(Winner == "")
+            {
+                Winner = player.PlayerName;  // Save the name of the alive Player
+                DuelWinner = $"{player.AuthorizedSteamID?.SteamId64}";
+                IsCTWon = player.TeamNum == 3 ? true : false;
+            }
+            else Winner = ""; // If Winner is already saved its mean 2 players are alived after the Duel. Then remove the Winner.
+            GiveBackSavedWeaponsToPlayers(player);
+        }
+        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+        if(Winner != ""){Server.PrintToChatAll($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.Duel.EndWins", Winner]}");}
+        else Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.EndDraw"]}");
+        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
+
         string[] Commands = GetDuelItem(SelectedDuelModeName)?.CMD_End.Split(",");
         if(mp_death_drop_gun_value != 0)Server.ExecuteCommand($"mp_death_drop_gun {mp_death_drop_gun_value}");
         if(mp_buytime_value != 0)Server.ExecuteCommand($"mp_buytime {mp_buytime_value}");
@@ -782,22 +810,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             Server.ExecuteCommand(cmd);
         }
-
-        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-        if(Winner != ""){Server.PrintToChatAll($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.Duel.EndWins", Winner]}");}
-        else Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.Duel.EndDraw"]}");
-        Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
-        g_PrepDuel = false;
-        g_DuelStarted = false;
-        if(t_DuelTimer != null)t_DuelTimer?.Kill();
-
+        
         // A new clever way to end round (when roundtime is already 0) and add team scores, instead of using TerminateRound
         if(Winner == "")Server.ExecuteCommand("mp_default_team_winner_no_objective 0"); // 0 = Round Draw
         else if(!IsCTWon)Server.ExecuteCommand("mp_default_team_winner_no_objective 2"); // 2 = Terrorist Wins
-        else if(IsCTWon)Server.ExecuteCommand("mp_default_team_winner_no_objective 3"); // 3 = Counter Terroirst Wins
-        Server.ExecuteCommand("mp_ignore_round_win_conditions 0");
-
-        Duelist = new CCSPlayerController[2]; // reset duelist
+        else if(IsCTWon)Server.ExecuteCommand("mp_default_team_winner_no_objective 3"); // 3 = Counter Terroirst Wins 
+        Server.NextFrame(() => Server.ExecuteCommand("mp_ignore_round_win_conditions 0"));
     }
     private DuelModeSettings GetDuelItem(string DuelModeName)
     {
@@ -821,7 +839,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     }
     private void GiveBackSavedWeaponsToPlayers(CCSPlayerController? player)
     {
-        if(player == null || !player.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return;
+        if(player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return;
+        player.RemoveWeapons(); // Remove Weapons from player
         if (playerSavedWeapons?.TryGetValue(player.UserId.ToString(), out var savedWeapons) == true)
         {
             foreach(var weapon in savedWeapons)
