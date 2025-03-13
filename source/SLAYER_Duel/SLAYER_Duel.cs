@@ -421,9 +421,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             var player = @event.Userid;
             if(player == null || !player.IsValid)return HookResult.Continue;
 
-            Server.PrintToChatAll($"EventHostageFollows");
-            Server.PrintToChatAll($"{player.PlayerName} | {player.TeamNum} | {@event.Hostage}");
-
             PlayerRescuingHostage[player] = true; // Set Player is Rescuing Hostage
 
             return HookResult.Continue;
