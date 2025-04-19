@@ -74,7 +74,7 @@ public class DuelModeSettings
 public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.8.6";
+    public override string ModuleVersion => "1.9";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -94,7 +94,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     private SqliteConnection _connection = null!;
 
     Dictionary<CCSPlayerController, int> PlayerOption = new Dictionary<CCSPlayerController, int>();
-    Dictionary<CCSPlayerController, bool> PlayerRescuingHostage = new Dictionary<CCSPlayerController, bool>();
+    //Dictionary<CCSPlayerController, bool> PlayerRescuingHostage = new Dictionary<CCSPlayerController, bool>();
     Dictionary<string, List<string>> playerSavedWeapons = new Dictionary<string, List<string>>();
     List<int> LastDuelNums = new List<int>();
     Dictionary<string, Dictionary<string, string>> Duel_Positions = new Dictionary<string, Dictionary<string, string>>();
@@ -124,11 +124,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_PrepDuel;
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_DuelTimer;
     Dictionary<CCSPlayerController, CounterStrikeSharp.API.Modules.Timers.Timer?> PlayerBeaconTimer = new Dictionary<CCSPlayerController, CounterStrikeSharp.API.Modules.Timers.Timer>();
+    Dictionary<CCSPlayerController, (int, bool)> PlayerArmorBeforeDuel = new Dictionary<CCSPlayerController, (int, bool)>();
     public KitsuneMenu kitsuneMenu { get; private set; } = null!;
     public override void Load(bool hotReload)
     {
         PlayerBeaconTimer?.Clear();
-        PlayerRescuingHostage?.Clear();
+        //PlayerRescuingHostage?.Clear();
         _connection = new SqliteConnection($"Data Source={Path.Join(ModuleDirectory, "Database/SLAYER_Duel.db")}");
         _connection.Open();
         if(hotReload)
@@ -178,7 +179,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(t_PrepDuel != null)t_PrepDuel.Kill();
             if(t_DuelTimer != null)t_DuelTimer.Kill();
             PlayerBeaconTimer?.Clear();
-            PlayerRescuingHostage?.Clear();
+            //PlayerRescuingHostage?.Clear();
         });
         RegisterListener<Listeners.OnTick>(() =>
         {
@@ -284,7 +285,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 if(timer != null)timer.Kill();
             }
             PlayerBeaconTimer?.Clear();
-            PlayerRescuingHostage?.Clear();
+            PlayerArmorBeforeDuel?.Clear();
+            //PlayerRescuingHostage?.Clear();
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerSpawn>((@event, info) =>
@@ -421,11 +423,14 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             var player = @event.Userid;
             if(player == null || !player.IsValid)return HookResult.Continue;
 
-            PlayerRescuingHostage[player] = true; // Set Player is Rescuing Hostage
-
+            //PlayerRescuingHostage[player] = true; // Set Player is Rescuing Hostage
+            if(!g_DuelStarted)
+            {
+                g_IsDuelPossible = false;
+            }
             return HookResult.Continue;
         });
-        RegisterEventHandler<EventHostageRescued>((@event, info) =>
+        /*RegisterEventHandler<EventHostageRescued>((@event, info) =>
         {
             var player = @event.Userid;
             if(player == null || !player.IsValid)return HookResult.Continue;
@@ -433,26 +438,27 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             PlayerRescuingHostage[player] = false; // Set Player is not Rescuing Hostage
 
             return HookResult.Continue;
-        });
+        });*/
         RegisterEventHandler<EventPlayerDeath>((@event, info) =>
         {
             if(!Config.PluginEnabled || g_BombPlanted)return HookResult.Continue; // Plugin should be Enable
             int ctplayer = 0, tplayer = 0, totalplayers = 0;
             // Count Players in Both Team on Any Player Death
-            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && !player.ControllingBot && (!PlayerRescuingHostage.ContainsKey(player) || PlayerRescuingHostage[player] == false)))
+            foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
             {
-                if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 2)tplayer++;
-                if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 3)ctplayer++;
+                if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 2 && !player.ControllingBot)tplayer++;
+                if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && player.TeamNum == 3 && !player.ControllingBot)ctplayer++;
                 //if(player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE && g_DuelStarted)player.RemoveWeapons();
                 totalplayers++;
             }
             CCSGameRules gamerules = GetGameRules();
             if(!g_IsDuelPossible)return HookResult.Continue;
-            if(!gamerules.WarmupPeriod && Config.Duel_MinPlayers <= totalplayers && ctplayer == 1 && tplayer == 1) // 1vs1 Situation and its not warmup
+            if(!gamerules.WarmupPeriod && totalplayers >= Config.Duel_MinPlayers && ctplayer == 1 && tplayer == 1) // 1vs1 Situation and its not warmup
             {
                 if(Config.Duel_ForceStart) // If Force Start Duel is true
                 {
-                    PrepDuel();
+                    RemoveObjectives(); // Remove Objectives from Map
+                    AddTimer(0.1f, ()=> PrepDuel());
                 }
                 else // if force start duel is false
                 {
@@ -581,7 +587,8 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             g_IsVoteStarted = false; // Both Accepted the Duel Vote, So no need to Exit Menu at Round End
             Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.Both"]}");
-            PrepDuel();
+            RemoveObjectives(); // Remove Objectives from Map
+            AddTimer(0.1f, ()=> PrepDuel());
         }
     }
     private void DeclineDuelVoteOption(CCSPlayerController player, ChatMenuOption? option)
@@ -634,7 +641,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 if(Config.Duel_Teleport)TeleportPlayer(player);
                 if(Config.Duel_FreezePlayers)FreezePlayer(player);   // Freeze Player
                 SavePlayerWeapons(player); // first save player weapons
-                player.RemoveWeapons(); // then remove weapons from player
+                player.PlayerPawn!.Value!?.ItemServices?.As<CCSPlayer_ItemServices>().RemoveWeapons(); // then remove weapons from player
                 if(Config.Duel_Beacon) // If Beacon Enabled
                 {
                     // Initialize the dictionary entry if not present
@@ -831,13 +838,19 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         // Get Player Weapons
         foreach (var weapon in player.PlayerPawn.Value.WeaponServices?.MyWeapons.Where(weapons => weapons != null && weapons.IsValid && weapons.Value != null && weapons.Value.DesignerName != null))
         {
-            playerSavedWeapons?[player.UserId.ToString()]?.Add($"{weapon.Value.DesignerName}");
+            playerSavedWeapons?[player.UserId.ToString()]?.Add($"{GetWeaponName(weapon.Value)}");
         }
+        // Save Player Armor and Helmet
+        if(new CCSPlayer_ItemServices(player.PlayerPawn.Value.ItemServices!.Handle).HasHelmet)
+        {
+            PlayerArmorBeforeDuel[player] = (player.PlayerPawn.Value.ArmorValue, true); // Save Player Armor + helmet before Duel
+        }
+        else PlayerArmorBeforeDuel[player] = (player.PlayerPawn.Value.ArmorValue, false); // Save only Player Armor before Duel
     }
     private void GiveBackSavedWeaponsToPlayers(CCSPlayerController? player)
     {
         if(player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return;
-        player.RemoveWeapons(); // Remove Weapons from player
+        player.PlayerPawn!.Value!?.ItemServices?.As<CCSPlayer_ItemServices>().RemoveWeapons(); // Remove Weapons from player
         if (playerSavedWeapons?.TryGetValue(player.UserId.ToString(), out var savedWeapons) == true)
         {
             foreach(var weapon in savedWeapons)
@@ -845,6 +858,19 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 player.GiveNamedItem($"{weapon}");
             }
         }
+        CCSPlayer_ItemServices services = new CCSPlayer_ItemServices(player.PlayerPawn.Value.ItemServices!.Handle);
+        
+        if(PlayerArmorBeforeDuel.ContainsKey(player) && PlayerArmorBeforeDuel[player].Item2) // if player has helmet then give back armor + helmet
+        {
+            player.PlayerPawn.Value.ArmorValue = PlayerArmorBeforeDuel[player].Item1;
+            services.HasHelmet = true;
+        }
+        else if(PlayerArmorBeforeDuel.ContainsKey(player) && PlayerArmorBeforeDuel[player].Item2 == false) // if player has no helmet then give back only armor
+        {
+            player.PlayerPawn.Value.ArmorValue = PlayerArmorBeforeDuel[player].Item1;
+            services.HasHelmet = false;
+        }
+        Utilities.SetStateChanged(player.PlayerPawn.Value, "CBasePlayerPawn", "m_pItemServices");
     }
     private void CreateLaserBeamBetweenPlayers(float time)
     {
@@ -1254,6 +1280,26 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if (activeWeaponHandle?.Value != null)
         {
             activeWeaponHandle.Value.ReserveAmmo[0] = 100;
+        }
+    }
+    public string? GetWeaponName(CBasePlayerWeapon weapon)
+    {
+        if ( !weapon.IsValid ) return null;
+
+        var vdata = weapon.GetVData<CCSWeaponBaseVData>()!;
+
+        return Utilities.ReadStringUtf8( Marshal.ReadIntPtr( Schema.GetSchemaValue<nint>( vdata.Handle, "CCSWeaponBaseVData", "m_szAnimClass" ), 0x10 ) + 0x10 );
+    }
+    private  void RemoveObjectives()
+    {
+        foreach (var entity in Utilities.GetAllEntities().Where(entity =>  entity != null && entity.IsValid))
+        {
+            if( entity.DesignerName ==  "c4" ||
+                entity.DesignerName ==  "hostage_entity")
+            {
+                entity.Remove();
+            }
+            
         }
     }
 }
