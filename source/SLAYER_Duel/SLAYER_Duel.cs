@@ -1,6 +1,7 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
+using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Modules.Admin;
@@ -18,10 +19,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
-// kitsune Menu
-using Menu;
-using Menu.Enums;
-using CounterStrikeSharp.API.Modules.Entities;
+using T3MenuSharedApi;
 
 namespace SLAYER_Duel;
 // Used these to remove compile warnings
@@ -37,6 +35,7 @@ public class SLAYER_DuelConfig : BasePluginConfig
     [JsonPropertyName("Duel_ForceStart")] public bool Duel_ForceStart { get; set; } = false;
     [JsonPropertyName("Duel_ShowMenuAt")] public int Duel_ShowMenuAt { get; set; } = 3;
     [JsonPropertyName("Duel_ShowDuelCounterIn")] public int Duel_ShowDuelCounterIn { get; set; } = 1;
+    [JsonPropertyName("Duel_TopPlayersCount")] public int Duel_TopPlayersCount { get; set; } = 10;
     [JsonPropertyName("Duel_FreezePlayerOnMenuShown")] public bool Duel_FreezePlayerOnMenuShown { get; set; } = true;
     [JsonPropertyName("Duel_DrawLaserBeam")] public bool Duel_DrawLaserBeam { get; set; } = true;
     [JsonPropertyName("Duel_BotAcceptDuel")] public bool Duel_BotAcceptDuel { get; set; } = true;
@@ -71,10 +70,10 @@ public class DuelModeSettings
     [JsonPropertyName("OnlyHeadshot")] public bool Only_headshot { get; set; } = false;
     [JsonPropertyName("DisableKnife")] public bool DisableKnife { get; set; } = false;
 }
-public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
+public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "1.9";
+    public override string ModuleVersion => "2.0";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -82,19 +81,9 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     {
         Config = config;
     }
-    public List<DuelModeSettings> GetDuelModes()
-    {
-        return Config.Duel_Modes;
-    }
-    
-    public DuelModeSettings GetDuelModeByName(string modeName, StringComparer comparer)
-    {
-        return Config.Duel_Modes.FirstOrDefault(mode => comparer.Equals(mode.Name, modeName));
-    }
     private SqliteConnection _connection = null!;
 
-    Dictionary<CCSPlayerController, int> PlayerOption = new Dictionary<CCSPlayerController, int>();
-    //Dictionary<CCSPlayerController, bool> PlayerRescuingHostage = new Dictionary<CCSPlayerController, bool>();
+    Dictionary<CCSPlayerController, PlayerSettings> PlayerOption = new Dictionary<CCSPlayerController, PlayerSettings>();
     Dictionary<string, List<string>> playerSavedWeapons = new Dictionary<string, List<string>>();
     List<int> LastDuelNums = new List<int>();
     Dictionary<string, Dictionary<string, string>> Duel_Positions = new Dictionary<string, Dictionary<string, string>>();
@@ -125,7 +114,14 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     public CounterStrikeSharp.API.Modules.Timers.Timer? t_DuelTimer;
     Dictionary<CCSPlayerController, CounterStrikeSharp.API.Modules.Timers.Timer?> PlayerBeaconTimer = new Dictionary<CCSPlayerController, CounterStrikeSharp.API.Modules.Timers.Timer>();
     Dictionary<CCSPlayerController, (int, bool)> PlayerArmorBeforeDuel = new Dictionary<CCSPlayerController, (int, bool)>();
-    public KitsuneMenu kitsuneMenu { get; private set; } = null!;
+    public IT3MenuManager? T3MenuManager; // get the instance
+    public IT3MenuManager? GetMenuManager()
+    {
+        if (T3MenuManager == null)
+            T3MenuManager = new PluginCapability<IT3MenuManager>("t3menu:manager").Get();
+
+        return T3MenuManager;
+    }
     public override void Load(bool hotReload)
     {
         PlayerBeaconTimer?.Clear();
@@ -136,41 +132,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         {
             foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV))
             {
-                var steamId = player.AuthorizedSteamID?.SteamId64;
-                if(PlayerOption == null)PlayerOption = new Dictionary<CCSPlayerController, int>(); // Initialize if null
-                if(!PlayerOption?.ContainsKey(player) == true)PlayerOption[player] = -1; // Add the key if not present
-                // Run in a separate thread to avoid blocking the main thread
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        var result = await _connection.QueryFirstOrDefaultAsync(@"SELECT `option` FROM `SLAYER_Duel` WHERE `steamid` = @SteamId;",
-                        new
-                        {
-                            SteamId = steamId
-                        });
-
-                        // So we use `Server.NextFrame` to run it on the next game tick.
-                        Server.NextFrame(() => 
-                        {
-                            PlayerOption[player] = Convert.ToInt32($"{result?.option ?? -1}");
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                        Logger.LogError($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                    }
-                });
+                LoadPlayerSettings(player);
             }
         }
         Task.Run(async () =>
         {
-            await _connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `SLAYER_Duel` (
-	                `steamid` UNSIGNED BIG INT NOT NULL,
-	                `option` INT NOT NULL DEFAULT -1,
-	                PRIMARY KEY (`steamid`));");
+            await _connection.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS `SLAYER_Duel` (`steamid` UNSIGNED BIG INT NOT NULL,`option` INT NOT NULL DEFAULT -1,`wins` INT NOT NULL DEFAULT 0,`losses` INT NOT NULL DEFAULT 0, PRIMARY KEY (`steamid`));");
         });
         LoadPositionsFromFile();
         RegisterListener<Listeners.OnMapStart>((mapname) =>
@@ -233,33 +200,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             var player = @event.Userid;
             if(!Config.PluginEnabled || player == null || !player.IsValid)return HookResult.Continue;
             
-            var steamId = player.AuthorizedSteamID?.SteamId64;
-            
-            if(PlayerOption == null)PlayerOption = new Dictionary<CCSPlayerController, int>(); // Initialize if null
-            if(!PlayerOption?.ContainsKey(player) == true)PlayerOption[player] = -1; // Add the key if not present
-            // Run in a separate thread to avoid blocking the main thread
-            Task.Run(async () =>
-            {
-                try
-                {
-                    var result = await _connection.QueryFirstOrDefaultAsync(@"SELECT `option` FROM `SLAYER_Duel` WHERE `steamid` = @SteamId;",
-                    new
-                    {
-                        SteamId = steamId
-                    });
-
-                    // So we use `Server.NextFrame` to run it on the next game tick.
-                    Server.NextFrame(() => 
-                    {
-                        PlayerOption[player] = Convert.ToInt32($"{result?.option ?? -1}");
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                    Logger.LogError($"[SLAYER_Duel] Error on PlayerConnectFull while retrieving player 'option': {ex.Message}");
-                }
-            });
+            LoadPlayerSettings(player);
             return HookResult.Continue;
         });
         AddCommandListener("jointeam", (player, commandInfo) =>     // Ban Team Switch during duel for duelist
@@ -295,7 +236,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(!Config.PluginEnabled || player == null || !player.IsValid || player.PlayerPawn.Value == null)return HookResult.Continue;
 
             // Kill player if he spawn during duel
-            //if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
+            if(g_PrepDuel || g_DuelStarted)player.PlayerPawn.Value.CommitSuicide(false, true);
 
             if(DuelWinner != "" && $"{player.AuthorizedSteamID?.SteamId64}" == DuelWinner) // Duel Winner
             {
@@ -316,8 +257,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             {
                 foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
-                    MenuManager.CloseActiveMenu(player);
-                    kitsuneMenu.ClearMenus(player);
+                    T3MenuManager.CloseMenu(player);
                 }
             }
             g_PrepDuel = false;
@@ -325,7 +265,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             g_IsDuelPossible = false;
             g_IsVoteStarted = false;
             if(t_PrepDuel != null)t_PrepDuel.Kill();
-            Duelist = new CCSPlayerController[2];
             Server.ExecuteCommand("mp_default_team_winner_no_objective -1"); // Set to default after duel
 
             return HookResult.Continue;
@@ -395,8 +334,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             {
                 foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
-                    MenuManager.CloseActiveMenu(player);
-                    kitsuneMenu.ClearMenus(player);
+                    T3MenuManager.CloseMenu(player);
                 }
             }
             return HookResult.Continue;
@@ -412,8 +350,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             {
                 foreach (var player in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected))
                 {
-                    MenuManager.CloseActiveMenu(player);
-                    kitsuneMenu.ClearMenus(player);
+                    T3MenuManager.CloseMenu(player);
                 }
             }
             return HookResult.Continue;
@@ -430,15 +367,6 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             }
             return HookResult.Continue;
         });
-        /*RegisterEventHandler<EventHostageRescued>((@event, info) =>
-        {
-            var player = @event.Userid;
-            if(player == null || !player.IsValid)return HookResult.Continue;
-
-            PlayerRescuingHostage[player] = false; // Set Player is not Rescuing Hostage
-
-            return HookResult.Continue;
-        });*/
         RegisterEventHandler<EventPlayerDeath>((@event, info) =>
         {
             if(!Config.PluginEnabled || g_BombPlanted)return HookResult.Continue; // Plugin should be Enable
@@ -481,12 +409,12 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                         }
                         else // Voting
                         {
-                            if(PlayerOption?.ContainsKey(player) == true && PlayerOption?[player] == 1) // if `1` is set in Database, then always accept duel without vote 
+                            if(PlayerOption.ContainsKey(player) && PlayerOption[player].Option == 1) // if `1` is set in Database, then always accept duel without vote 
                             {
                                 if(player.TeamNum == 2){PlayersDuelVoteOption[0] = true;Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.T", player.PlayerName]}");}
                                 if(player.TeamNum == 3){PlayersDuelVoteOption[1] = true;Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.CT", player.PlayerName]}");}
                             }
-                            else if(PlayerOption?.ContainsKey(player) == true && PlayerOption?[player] == 0) // if `0` is set in Database, then always decline duel without vote 
+                            else if(PlayerOption.ContainsKey(player) && PlayerOption[player].Option == 0) // if `0` is set in Database, then always decline duel without vote 
                             {
                                 if(player.TeamNum == 2){PlayersDuelVoteOption[0] = false;Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.RejectedDuel.T", player.PlayerName]}");}
                                 if(player.TeamNum == 3){PlayersDuelVoteOption[1] = false;Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.RejectedDuel.CT", player.PlayerName]}");}
@@ -494,18 +422,18 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                             else  // if `-1` is set in Database, then start vote 
                             {
                                 g_IsVoteStarted = true;
-                                if(Config.Duel_ShowMenuAt <= 1) // if Chat menu select in JSON file then show vote in Chat menu
+                                if (Config.Duel_ShowMenuAt <= 1) // if Chat menu select in JSON file then show vote in Chat menu
                                 {
-                                    if(Config.Duel_FreezePlayerOnMenuShown)FreezePlayer(player);
+                                    if (Config.Duel_FreezePlayerOnMenuShown) FreezePlayer(player);
                                     var DuelVote_Chat = new ChatMenu($"{Localizer["Menu.Title"]}");
                                     DuelVote_Chat.AddMenuOption($"{Localizer["Menu.Accept"]}", AcceptDuelVoteOption);
                                     DuelVote_Chat.AddMenuOption($"{Localizer["Menu.Decline"]}", DeclineDuelVoteOption);
                                     DuelVote_Chat.PostSelectAction = PostSelectAction.Close;
                                     MenuManager.OpenChatMenu(player, DuelVote_Chat);
                                 }
-                                else if(Config.Duel_ShowMenuAt == 2) // show vote in Center HTML menu
+                                else if (Config.Duel_ShowMenuAt == 2) // show vote in Center HTML menu
                                 {
-                                    if(Config.Duel_FreezePlayerOnMenuShown)FreezePlayer(player);
+                                    if (Config.Duel_FreezePlayerOnMenuShown) FreezePlayer(player);
                                     var DuelVote_Center = new CenterHtmlMenu($"{Localizer["Menu.Title"]}", this);
                                     DuelVote_Center.AddMenuOption($"{Localizer["Menu.Accept"]}", AcceptDuelVoteOption);
                                     DuelVote_Center.AddMenuOption($"{Localizer["Menu.Decline"]}", DeclineDuelVoteOption);
@@ -514,30 +442,25 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                                 }
                                 else  // otherwise show WASD vote menu in Center
                                 {
-                                    kitsuneMenu = new KitsuneMenu(this);
-                                    if(kitsuneMenu == null)return HookResult.Continue;
+                                    var manager = GetMenuManager();
+                                    if (manager == null) return HookResult.Continue;
 
-                                    kitsuneMenu.ShowScrollableMenu(player, Localizer["Menu.Title"],
-                                    [
-                                        new MenuItem(MenuItemType.Button, [new MenuValue(Localizer["Menu.Accept"])]),
-                                        new MenuItem(MenuItemType.Button, [new MenuValue(Localizer["Menu.Decline"])]),
-                                    ], (buttons, menu, selected) =>
+                                    // Create menu
+                                    var settingsMenu = manager.CreateMenu($"<font color='gold'>{Localizer["Menu.Title"]}</font>", false, Config.Duel_FreezePlayerOnMenuShown, true, false, false);
+                                    // Add option to Accept
+                                    settingsMenu.AddOption($"<font color='lime'>{Localizer["Menu.Accept"]}</font>", (p, option) =>
                                     {
-                                        if (selected == null) return;
-                                        if(buttons == MenuButtons.Select)
-                                        {
-                                            if(menu.Option == 0) // Accept
-                                            {
-                                                AcceptDuelVoteOption(player, null);
-                                                kitsuneMenu.ClearMenus(player);
-                                            }
-                                            else if(menu.Option == 1) // Decline
-                                            {
-                                                DeclineDuelVoteOption(player, null);
-                                                kitsuneMenu.ClearMenus(player);
-                                            }
-                                        }
-                                    }, false, Config.Duel_FreezePlayerOnMenuShown, 5, disableDeveloper: true);
+                                        AcceptDuelVoteOption(player, null);
+                                        T3MenuManager.CloseMenu(player);
+                                    });
+
+                                    // Add option to Reject
+                                    settingsMenu.AddOption($"<font color='red'>{Localizer["Menu.Decline"]}</font>", (p, option) =>
+                                    {
+                                        DeclineDuelVoteOption(player, null);
+                                        T3MenuManager.CloseMenu(player);
+                                    });
+                                    T3MenuManager.OpenMainMenu(player, settingsMenu);
                                 }
                             }
                             if(!g_IsVoteStarted) // if both players Duel Vote option is saved in Database then it means vote was not started for any player
@@ -790,16 +713,27 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                 }
             }
         }
-        foreach (var player in Utilities.GetPlayers().Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.TeamNum > 0 && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
+        foreach (var duelist in Duelist.Where(player => player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsHLTV && player.TeamNum > 0 && player.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE))
         {
-            if(Winner == "")
+            if (Winner == "")
             {
-                Winner = player.PlayerName;  // Save the name of the alive Player
-                DuelWinner = $"{player.AuthorizedSteamID?.SteamId64}";
-                IsCTWon = player.TeamNum == 3 ? true : false;
+                Winner = duelist.PlayerName;  // Save the name of the alive Player
+                DuelWinner = $"{duelist.AuthorizedSteamID?.SteamId64}";
+                IsCTWon = duelist.TeamNum == 3 ? true : false;
+
+                AddPlayerWin(duelist);
+                // Add loss to the other duelist
+                var loser = Duelist.FirstOrDefault(d => d != null && d != duelist && d.IsValid);
+                if (loser != null)
+                {
+                    AddPlayerLoss(loser);
+                }
             }
-            else Winner = ""; // If Winner is already saved its mean 2 players are alived after the Duel. Then remove the Winner.
-            GiveBackSavedWeaponsToPlayers(player);
+            else // If Winner is already saved its mean 2 players are alived after the Duel. Then remove the Winner.
+            {
+                Winner = "";
+            } 
+            GiveBackSavedWeaponsToPlayers(duelist);
         }
         Server.PrintToChatAll($" {ChatColors.Green}★ {ChatColors.DarkRed}-----------------------------------------------------------------------");
         if(Winner != ""){Server.PrintToChatAll($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.Duel.EndWins", Winner]}");}
@@ -838,7 +772,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         // Get Player Weapons
         foreach (var weapon in player.PlayerPawn.Value.WeaponServices?.MyWeapons.Where(weapons => weapons != null && weapons.IsValid && weapons.Value != null && weapons.Value.DesignerName != null))
         {
-            playerSavedWeapons?[player.UserId.ToString()]?.Add($"{GetWeaponName(weapon.Value)}");
+            playerSavedWeapons?[player.UserId.ToString()]?.Add($"{weapon.Value.DesignerName}");
         }
         // Save Player Armor and Helmet
         if(new CCSPlayer_ItemServices(player.PlayerPawn.Value.ItemServices!.Handle).HasHelmet)
@@ -897,7 +831,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     {
         if (player.Pawn == null || !player.Pawn.IsValid || !Config.PluginEnabled || !g_DuelStarted || !g_DuelNoscope || player?.PlayerPawn?.Value?.WeaponServices?.MyWeapons == null)
             return;
-        if(player.PlayerPawn.Value.WeaponServices!.MyWeapons.Count != 0)
+        if(player.PlayerPawn.Value.WeaponServices!.MyWeapons.Count != 0) // Noscope
         {
             var ActiveWeaponName = player.PlayerPawn.Value.WeaponServices!.ActiveWeapon.Value.DesignerName;
             if(ActiveWeaponName.Contains("weapon_ssg08") || ActiveWeaponName.Contains("weapon_awp")
@@ -918,7 +852,7 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         }
     }
     [GameEventHandler(HookMode.Pre)]
-    public HookResult BulletImpact(EventBulletImpact @event, GameEventInfo info)
+    public HookResult BulletImpact(EventBulletImpact @event, GameEventInfo info) // Bullet Tracers
     {
         CCSPlayerController player = @event.Userid;
         if (!Config.PluginEnabled || !g_DuelStarted || !g_DuelBullettracers || player.Pawn == null || !player.Pawn.IsValid)
@@ -932,374 +866,17 @@ public class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         
         return HookResult.Continue;
     }
-    public void DrawBeaconOnPlayer(CCSPlayerController? player)
+    public List<DuelModeSettings> GetDuelModes()
     {
-        if(player == null || !player.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return;
-        
-        Vector mid =  new Vector(player?.PlayerPawn.Value.AbsOrigin.X,player?.PlayerPawn.Value.AbsOrigin.Y,player?.PlayerPawn.Value.AbsOrigin.Z);
-
-        int lines = 20;
-        int[] ent = new int[lines];
-        CBeam[] beam_ent = new CBeam[lines];
-
-        // draw piecewise approx by stepping angle
-        // and joining points with a dot to dot
-        float step = (float)(2.0f * Math.PI) / (float)lines;
-        float radius = 20.0f;
-
-        float angle_old = 0.0f;
-        float angle_cur = step;
-
-        float BeaconTimerSecond = 0.0f;
-
-        
-        for(int i = 0; i < lines; i++) // Drawing Beacon Circle
-        {
-            Vector start = angle_on_circle(angle_old, radius, mid);
-            Vector end = angle_on_circle(angle_cur, radius, mid);
-
-            if(player.TeamNum == 2)
-            {
-                var result = DrawLaserBetween(start, end, Color.Red, 1.0f, 2.0f);
-                ent[i] = result.Item1;
-                beam_ent[i] = result.Item2;
-            } 
-            if(player.TeamNum == 3)
-            {
-                var result = DrawLaserBetween(start, end, Color.Blue, 1.0f, 2.0f);
-                ent[i] = result.Item1;
-                beam_ent[i] = result.Item2;
-            }
-
-            angle_old = angle_cur;
-            angle_cur += step;
-        }
-        
-        AddTimer(0.1f, ()=>
-        {
-            if (BeaconTimerSecond >= 0.9f)
-            {
-                return;
-            }
-            for(int i = 0; i < lines; i++) // Moving Beacon Circle
-            {
-                Vector start = angle_on_circle(angle_old, radius, mid);
-                Vector end = angle_on_circle(angle_cur, radius, mid);
-
-                TeleportLaser(beam_ent[i], start, end);
-
-                angle_old = angle_cur;
-                angle_cur += step;
-            }
-            radius += 10;
-            BeaconTimerSecond += 0.1f;
-        }, TimerFlags.REPEAT);
-        PlaySoundOnPlayer(player, "sounds/tools/sfm/beep.vsnd_c");
-        return;
+        return Config.Duel_Modes;
     }
-    private void PlaySoundOnPlayer(CCSPlayerController? player, String sound)
+    
+    public DuelModeSettings GetDuelModeByName(string modeName, StringComparer comparer)
     {
-        if(player == null || !player.IsValid)return;
-        player.ExecuteClientCommand($"play {sound}");
+        return Config.Duel_Modes.FirstOrDefault(mode => comparer.Equals(mode.Name, modeName));
     }
-    private static readonly Vector VectorZero = new Vector(0, 0, 0);
-    private static readonly QAngle RotationZero = new QAngle(0, 0, 0);
-    public (int, CBeam) DrawLaserBetween(Vector startPos, Vector endPos, Color color, float life, float width)
-    {
-        if (startPos == null || endPos == null)
-            return (-1, null);
+    
 
-        CBeam beam = Utilities.CreateEntityByName<CBeam>("beam");
-
-        if (beam == null)
-        {
-            Logger.LogError($"Failed to create beam...");
-            return (-1, null);
-        }
-
-        beam.Render = color;
-        beam.Width = width;
-
-        beam.Teleport(startPos, RotationZero, VectorZero);
-        beam.EndPos.X = endPos.X;
-        beam.EndPos.Y = endPos.Y;
-        beam.EndPos.Z = endPos.Z;
-        beam.DispatchSpawn();
-
-        AddTimer(life, () => {if(beam != null && beam.IsValid) beam.Remove(); }); // destroy beam after specific time
-
-        return ((int)beam.Index, beam);
-    }
-    public void TeleportLaser(CBeam? laser,Vector start, Vector end)
-    {
-        if(laser == null || !laser.IsValid)return;
-        // set pos
-        laser.Teleport(start, RotationZero, VectorZero);
-        // end pos
-        // NOTE: we cant just move the whole vec
-        laser.EndPos.X = end.X;
-        laser.EndPos.Y = end.Y;
-        laser.EndPos.Z = end.Z;
-        Utilities.SetStateChanged(laser,"CBeam", "m_vecEndPos");
-    }
-    private float CalculateDistance(Vector point1, Vector point2)
-    {
-        float dx = point2.X - point1.X;
-        float dy = point2.Y - point1.Y;
-        float dz = point2.Z - point1.Z;
-
-        return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
-    private Vector angle_on_circle(float angle, float radius, Vector mid)
-    {
-        // {r * cos(x),r * sin(x)} + mid
-        // NOTE: we offset Z so it doesn't clip into the ground
-        return new Vector((float)(mid.X + (radius * Math.Cos(angle))),(float)(mid.Y + (radius * Math.Sin(angle))), mid.Z + 6.0f);
-    }
-    private void TeleportPlayer(CCSPlayerController? player)
-	{
-		if (Duel_Positions?.ContainsKey(Server.MapName) == true) // If Map Exist in File
-		{
-            if(player == null || !player.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE)return; // If player is not Valid then return
-            Vector TeleportPosition = GetPositionFromFile(player.TeamNum); // Get Teleport Position From JSON file
-            if(TeleportPosition != null)player.PlayerPawn.Value.Teleport(TeleportPosition, player.PlayerPawn.Value.AngVelocity, new Vector(0f, 0f, 0f)); // Teleport Player to That position
-        }
-        else return; // If Map not Exist in File then do nothing
-    }
-
-    // Commands
-    [ConsoleCommand("duel", "Open Chat Menu of Player Duel Settings")]
-	public void PlayerDuelSettings(CCSPlayerController? player, CommandInfo command)
-	{
-        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected)
-		{
-			return;
-		}
-        string SelectedOption = "";
-        if(PlayerOption?.ContainsKey(player) == true && PlayerOption[player] == 1){SelectedOption = $"{Localizer["PlayerMenu.Accept"]}";}
-        if(PlayerOption?.ContainsKey(player) == true && PlayerOption[player] == 0){SelectedOption = $"{Localizer["PlayerMenu.Decline"]}";}
-        if(PlayerOption?.ContainsKey(player) == true && PlayerOption[player] == -1){SelectedOption = $"{Localizer["PlayerMenu.Vote"]}";}
-        var PlayerDuelSettings = new ChatMenu($"{Localizer["PlayerMenu.Title"]} {Localizer["PlayerMenu.Selected", SelectedOption]}");
-        //PlayerDuelSettings.AddMenuOption($"{Localizer["PlayerMenu.Selected", SelectedOption]}",SetShowVote,true);
-        PlayerDuelSettings.AddMenuOption($"{Localizer["PlayerMenu.Accept"]}", SetAlwaysAccept);
-        PlayerDuelSettings.AddMenuOption($"{Localizer["PlayerMenu.Decline"]}", SetAlwaysDecline);
-        PlayerDuelSettings.AddMenuOption($"{Localizer["PlayerMenu.Vote"]}", SetShowVote);
-        PlayerDuelSettings.ExitButton = true;
-        PlayerDuelSettings.PostSelectAction = PostSelectAction.Close;
-        MenuManager.OpenChatMenu(player, PlayerDuelSettings);
-    }
-    private void SetAlwaysAccept(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-
-        PlayerOption[player] = 1;
-        SetPlayerDuelOption(player, 1);
-        
-        player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Accept", player.PlayerPawn.Value!.AbsOrigin]}");
-    }
-    private void SetAlwaysDecline(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-        
-        PlayerOption[player] = 0;
-        SetPlayerDuelOption(player, 0);
-
-        player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Decline", player.PlayerPawn.Value!.AbsOrigin]}");
-    }
-    private void SetShowVote(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-        
-        PlayerOption[player] = -1;
-        SetPlayerDuelOption(player, -1);
-
-        player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Vote", player.PlayerPawn.Value!.AbsOrigin]}");
-    }
-
-    [ConsoleCommand("duel_settings", "Open Chat Menu of Duel Settings")]
-	[RequiresPermissions("@css/root")]
-	public void DuelSettings(CCSPlayerController? player, CommandInfo command)
-	{
-        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected)
-		{
-			return;
-		}
-        var DuelSettings = new ChatMenu($"{Localizer["MenuSettings.Title"]}");
-        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportSetT"]}", SetTerroristTeleportPosition);
-        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportSetCT"]}", SetCTerroristTeleportPosition);
-        DuelSettings.AddMenuOption($"{Localizer["MenuSettings.TeleportDelete"]}", DeleteTeleportPositions);
-        DuelSettings.ExitButton = true;
-        DuelSettings.PostSelectAction = PostSelectAction.Close;
-        MenuManager.OpenChatMenu(player, DuelSettings);
-    }
-    private void SetTerroristTeleportPosition(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-        
-        if (Duel_Positions.ContainsKey(Server.MapName)) // Check If Map already exist in JSON file
-        {
-            Dictionary<string, string> MapData = Duel_Positions[Server.MapName]; // Get Map Settings
-            MapData["T_Pos"] = $"{player.PlayerPawn.Value!.AbsOrigin}"; // Edit t_pos value
-            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
-        }
-        else // If Map not found in JSON file
-        {
-            // Save/add this in Global Veriable
-            Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}, {"CT_Pos", ""}});
-            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Saving Position in File
-        }
-        player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.TeleportSetT", player.PlayerPawn.Value!.AbsOrigin]}");
-    }
-    private void SetCTerroristTeleportPosition(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-
-        if (Duel_Positions.ContainsKey(Server.MapName)) // Check If Map already exist in JSON file
-        {
-            Dictionary<string, string> MapData = Duel_Positions[Server.MapName]; // Get Map Settings
-            MapData["CT_Pos"] = $"{player.PlayerPawn.Value!.AbsOrigin}"; // Edit ct_pos value
-            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
-        }
-        else // If Map not found in JSON file
-        {
-            // Save/add this in Global Veriable
-            Duel_Positions.Add(Server.MapName, new Dictionary<string, string>{{"T_Pos", ""}, {"CT_Pos", $"{player.PlayerPawn.Value!.AbsOrigin}"}});
-            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions));
-        }
-		player.PrintToChat($"{Localizer["Chat.Prefix"]} {Localizer["Chat.DuelSettings.TeleportSetCT", player.PlayerPawn.Value!.AbsOrigin]}");
-	}
-    private void DeleteTeleportPositions(CCSPlayerController? player, ChatMenuOption option)
-    {
-        if(player == null || player.IsValid == false)return;
-        
-        if (Duel_Positions != null && Duel_Positions.ContainsKey(Server.MapName)) // Check If Map exist in JSON file
-        {
-            Duel_Positions.Remove(Server.MapName); // Delete Map Settings
-            File.WriteAllText(GetMapTeleportPositionConfigPath(), JsonSerializer.Serialize(Duel_Positions)); // Update File
-        }
-        player.PrintToChat($"{Localizer["Chat.Prefix"]} {Localizer["Chat.DuelSettings.TeleportDelete"]}");
-    }
-    private string GetMapTeleportPositionConfigPath()
-    {
-        string? path = Path.GetDirectoryName(ModuleDirectory);
-        if (Directory.Exists(path + $"/{ModuleName}"))
-        {
-            return Path.Combine(path, $"../configs/plugins/{ModuleName}/Duel_TeleportPositions.json");
-        }
-        return $"{ModuleDirectory}/Duel_TeleportPositions.json";
-    }
-    private Vector GetPositionFromFile(int TeamNum)
-    {
-        var mapData = Duel_Positions[Server.MapName]; // Get Current Map Teleport Positions
-        if (TeamNum == 2 && mapData.ContainsKey("T_Pos") && mapData["T_Pos"] != "") // If player team is Terrorist then get the T_Pos from File
-        {
-            string[] Positions = mapData["T_Pos"].Split(" "); // Split Coordinates with space " "
-            return new Vector(float.Parse(Positions[0]), float.Parse(Positions[1]), float.Parse(Positions[2])); // Return Coordinates in Vector
-        }
-        else if(TeamNum == 3 && mapData.ContainsKey("CT_Pos") && mapData["CT_Pos"] != "") // If player team is C-Terrorist then get the CT_Pos from File
-        {
-            string[] Positions = mapData["CT_Pos"].Split(" "); // Split Coordinates with space " "
-            return new Vector(float.Parse(Positions[0]), float.Parse(Positions[1]), float.Parse(Positions[2])); // Return Coordinates in Vector
-        }
-        return null;
-    }
-    private void LoadPositionsFromFile()
-    {
-        if (!File.Exists(GetMapTeleportPositionConfigPath()))
-		{
-			return;
-		}
-		
-		var data = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(File.ReadAllText(GetMapTeleportPositionConfigPath()));
-		
-		if(data != null)
-		{
-			Duel_Positions = data;
-		}
-    }
-    private void SetPlayerDuelOption(CCSPlayerController? player, int choice)
-    {
-        if(player == null || player.IsValid == false)return;
-
-        var steamId = player.AuthorizedSteamID?.SteamId64; // Get Player Steam ID
-        if (steamId == null) return; // Steam ID shouldn't be Null
-        
-        Task.Run(async () => // Run in a separate thread to avoid blocking the main thread
-        {
-            try
-            {
-                // insert or update the player's fov
-                await _connection.ExecuteAsync(@"
-                    INSERT INTO `SLAYER_Duel` (`steamid`, `option`) VALUES (@SteamId, @Option)
-                    ON CONFLICT(`steamid`) DO UPDATE SET `option` = @Option;",
-                    new
-                    {
-                        SteamId = steamId,
-                        Option = choice
-                    });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SLAYER_Duel] Error while saving player 'Option': {ex.Message}");
-                Logger.LogError($"[SLAYER_Duel] Error while saving player 'Option': {ex.Message}");
-            }
-        });
-    }
-    public static CCSGameRules GetGameRules()
-    {
-        return Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules!;
-    }
-    private void FreezePlayer(CCSPlayerController? player)
-    {
-        if(player == null || !player.IsValid)return;
-        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_OBSOLETE;
-        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 1); // freeze
-        Utilities.SetStateChanged(player.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
-        player.PlayerPawn.Value.TakesDamage = false;
-    }
-    private void UnFreezePlayer(CCSPlayerController? player)
-    {
-        if(player == null || !player.IsValid)return;
-        player.PlayerPawn.Value.MoveType = MoveType_t.MOVETYPE_WALK;
-        Schema.SetSchemaValue(player.PlayerPawn.Value.Handle, "CBaseEntity", "m_nActualMoveType", 2); // walk
-        Utilities.SetStateChanged(player.PlayerPawn.Value, "CBaseEntity", "m_MoveType");
-        player.PlayerPawn.Value.TakesDamage = true;
-    }
-    private void ApplyInfiniteClip(CCSPlayerController player)
-    {
-        var activeWeaponHandle = player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon;
-        if (activeWeaponHandle?.Value != null)
-        {
-            activeWeaponHandle.Value.Clip1 = 100;
-        }
-    }
-
-    private void ApplyInfiniteReserve(CCSPlayerController player)
-    {
-        var activeWeaponHandle = player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon;
-        if (activeWeaponHandle?.Value != null)
-        {
-            activeWeaponHandle.Value.ReserveAmmo[0] = 100;
-        }
-    }
-    public string? GetWeaponName(CBasePlayerWeapon weapon)
-    {
-        if ( !weapon.IsValid ) return null;
-
-        var vdata = weapon.GetVData<CCSWeaponBaseVData>()!;
-
-        return Utilities.ReadStringUtf8( Marshal.ReadIntPtr( Schema.GetSchemaValue<nint>( vdata.Handle, "CCSWeaponBaseVData", "m_szAnimClass" ), 0x10 ) + 0x10 );
-    }
-    private  void RemoveObjectives()
-    {
-        foreach (var entity in Utilities.GetAllEntities().Where(entity =>  entity != null && entity.IsValid))
-        {
-            if( entity.DesignerName ==  "c4" ||
-                entity.DesignerName ==  "hostage_entity")
-            {
-                entity.Remove();
-            }
-            
-        }
-    }
+    
+    
 }

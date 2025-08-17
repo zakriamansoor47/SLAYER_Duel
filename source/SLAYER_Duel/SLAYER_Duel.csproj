@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.316" />
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.335" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,9 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="KitsuneMenu">
-    <HintPath>..\..\shared\KitsuneMenu\KitsuneMenu.dll</HintPath>
-    <Private>false</Private>
+    <Reference Include="T3MenuSharedAPI">
+      <HintPath>..\shared\T3MenuSharedAPI\T3MenuSharedAPI.dll</HintPath>
     </Reference>
   </ItemGroup>
 
