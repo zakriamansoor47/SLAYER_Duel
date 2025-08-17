@@ -7,6 +7,9 @@
 ## Description:
 This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. The main feature is that you can your own **Custom Duel Mode** from **JSON** file Easily.
 
+## Required:
+**[T3Menu](https://github.com/T3Marius/T3Menu-API)** - To Use WASD Menu
+
 ## Installation:
 **1.** Upload files to your server.
 
@@ -55,11 +58,13 @@ This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. T
 
 **20.** Supports **KitsuneMenu (WASD Menu)**
 
-**21.** And much more.
+**21.** Duel Stats
+
+**22.** And much more.
 
 
 ## Commands:
-`!duel` - To set Duel Vote Choice every time (For all players)
+`!duel` - To set Duel Vote Choice every time and to Check Players Duel Stats (For all players)
 `!duel_settings` - To Set/Delete Custom Teleport Points for Duel. (Only for Root Admins)
 
 
@@ -70,6 +75,7 @@ This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. T
   "Duel_ForceStart": false,       		// Force Start Duel? (true = Yes, false = Vote for Duel)
   "Duel_ShowMenuAt": 3,  		  		// Location of Duel Voting Menu? (1 = Chat, 2 = Center Html, 3 = Center WASD Menu)
   "Duel_ShowDuelCounterIn": 1,  		// Location of Duel Start Counter? (1 = Center HTML, 2 = Center Alert)
+  "Duel_TopPlayersCount": 10,			// Show how many top players in the !duel menu
   "Duel_FreezePlayerOnMenuShown": true, // FreezePlayerOnMenuShown? (true = Freeze, false = Don't Freeze)
   "Duel_DrawLaserBeam": true,     		// Draw a Laser Beam Between Players to find each other if they are Far from Each other. 
   "Duel_WinnerExtraHealth": 10,	  		// The amount of extra health to give the winner for the next round only. (0 = no extra health)
