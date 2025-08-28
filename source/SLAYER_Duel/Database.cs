@@ -39,6 +39,15 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                     PlayerOption[player].Wins = Convert.ToInt32($"{result?.wins ?? 0}");
                     PlayerOption[player].Losses = Convert.ToInt32($"{result?.losses ?? 0}");
                 });
+
+                // Update player name in database when they connect
+                await _connection.ExecuteAsync(@"INSERT INTO `SLAYER_Duel` (`steamid`, `name`, `option`, `wins`, `losses`) VALUES (@SteamId, @Name, -1, 0, 0)
+                    ON CONFLICT(`steamid`) DO UPDATE SET `name` = @Name;",
+                    new
+                    {
+                        SteamId = steamId,
+                        Name = PlayerOption![player].PlayerName
+                    });
             }
             catch (Exception ex)
             {
@@ -50,7 +59,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 
     private void SetPlayerDuelOption(CCSPlayerController? player, int choice)
     {
-        if (player == null || player.IsValid == false) return;
+        if (player == null || player.IsValid == false || PlayerOption == null) return;
 
         var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
@@ -59,6 +68,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if (PlayerOption?.ContainsKey(player) == true)
         {
             PlayerOption[player].Option = choice;
+            PlayerOption![player].PlayerName = player.PlayerName;
         }
 
         Task.Run(async () =>
@@ -66,11 +76,12 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             try
             {
                 await _connection.ExecuteAsync(@"
-                    INSERT INTO `SLAYER_Duel` (`steamid`, `option`, `wins`, `losses`) VALUES (@SteamId, @Option, 0, 0)
-                    ON CONFLICT(`steamid`) DO UPDATE SET `option` = @Option;",
+                    INSERT INTO `SLAYER_Duel` (`steamid`, `name`, `option`, `wins`, `losses`) VALUES (@SteamId, @Name, @Option, 0, 0)
+                    ON CONFLICT(`steamid`) DO UPDATE SET `name` = @Name, `option` = @Option;",
                     new
                     {
                         SteamId = steamId,
+                        Name = PlayerOption![player].PlayerName,
                         Option = choice
                     });
             }
@@ -84,15 +95,21 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 
     private void AddPlayerWin(CCSPlayerController? player)
     {
-        if (player == null || !player.IsValid) return;
+        if (player == null || !player.IsValid || PlayerOption == null) return;
 
         var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
 
         // Update local settings
+        var PlayerName = "";
         if (PlayerOption?.ContainsKey(player) == true)
         {
             PlayerOption[player].Wins++;
+            PlayerName = PlayerOption[player].PlayerName;
+        }
+        else
+        {   
+            PlayerName = player.PlayerName;
         }
 
         Task.Run(async () =>
@@ -100,11 +117,12 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             try
             {
                 await _connection.ExecuteAsync(@"
-                    INSERT INTO `SLAYER_Duel` (`steamid`, `option`, `wins`, `losses`) VALUES (@SteamId, -1, 1, 0)
-                    ON CONFLICT(`steamid`) DO UPDATE SET `wins` = `wins` + 1;",
+                    INSERT INTO `SLAYER_Duel` (`steamid`, `name`, `option`, `wins`, `losses`) VALUES (@SteamId, @Name, -1, 1, 0)
+                    ON CONFLICT(`steamid`) DO UPDATE SET `name` = @Name, `wins` = `wins` + 1;",
                     new
                     {
-                        SteamId = steamId
+                        SteamId = steamId,
+                        Name = PlayerName
                     });
             }
             catch (Exception ex)
@@ -117,15 +135,21 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 
     private void AddPlayerLoss(CCSPlayerController? player)
     {
-        if (player == null || !player.IsValid) return;
+        if (player == null || !player.IsValid || PlayerOption == null) return;
 
         var steamId = player.AuthorizedSteamID?.SteamId64;
         if (steamId == null) return;
 
         // Update local settings
+        var PlayerName = "";
         if (PlayerOption?.ContainsKey(player) == true)
         {
             PlayerOption[player].Losses++;
+            PlayerName = PlayerOption[player].PlayerName;
+        }
+        else
+        {   
+            PlayerName = player.PlayerName;
         }
 
         Task.Run(async () =>
@@ -133,11 +157,12 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             try
             {
                 await _connection.ExecuteAsync(@"
-                    INSERT INTO `SLAYER_Duel` (`steamid`, `option`, `wins`, `losses`) VALUES (@SteamId, -1, 0, 1)
-                    ON CONFLICT(`steamid`) DO UPDATE SET `losses` = `losses` + 1;",
+                    INSERT INTO `SLAYER_Duel` (`steamid`, `name`, `option`, `wins`, `losses`) VALUES (@SteamId, @Name, -1, 0, 1)
+                    ON CONFLICT(`steamid`) DO UPDATE SET `name` = @Name, `losses` = `losses` + 1;",
                     new
                     {
-                        SteamId = steamId
+                        SteamId = steamId,
+                        Name = PlayerName
                     });
             }
             catch (Exception ex)
@@ -156,10 +181,16 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         if (steamId == null) return;
 
         // Update local settings
+        var PlayerName = "";
         if (PlayerOption?.ContainsKey(player) == true)
         {
             PlayerOption[player].Wins = wins;
             PlayerOption[player].Losses = losses;
+            PlayerName = player.PlayerName;
+        }
+        else
+        {
+            PlayerName = player.PlayerName;
         }
 
         Task.Run(async () =>
@@ -167,11 +198,12 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             try
             {
                 await _connection.ExecuteAsync(@"
-                    INSERT INTO `SLAYER_Duel` (`steamid`, `option`, `wins`, `losses`) VALUES (@SteamId, -1, @Wins, @Losses)
-                    ON CONFLICT(`steamid`) DO UPDATE SET `wins` = @Wins, `losses` = @Losses;",
+                    INSERT INTO `SLAYER_Duel` (`steamid`, `name`, `option`, `wins`, `losses`) VALUES (@SteamId, @Name, -1, @Wins, @Losses)
+                    ON CONFLICT(`steamid`) DO UPDATE SET `name` = @Name, `wins` = @Wins, `losses` = @Losses;",
                     new
                     {
                         SteamId = steamId,
+                        Name = PlayerName,
                         Wins = wins,
                         Losses = losses
                     });
@@ -201,33 +233,34 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             try
             {
                 var result = await _connection.QueryAsync(@"
-                    SELECT `steamid`, `option`, `wins`, `losses` 
+                    SELECT `steamid`, `name`, `option`, `wins`, `losses` 
                     FROM `SLAYER_Duel` 
                     WHERE `wins` > 0 
                     ORDER BY `wins` DESC, `losses` ASC 
                     LIMIT @Limit;",
                     new { Limit = limit });
 
-                var dbResults = new List<(ulong steamId, int option, int wins, int losses)>();
+                var dbResults = new List<(ulong steamId, string name, int option, int wins, int losses)>();
                 
                 // Store database results first
                 foreach (var row in result)
                 {
                     dbResults.Add((
                         Convert.ToUInt64(row.steamid),
+                        Convert.ToString(row.name) ?? "",
                         Convert.ToInt32(row.option),
                         Convert.ToInt32(row.wins),
                         Convert.ToInt32(row.losses)
                     ));
                 }
 
-                // Switch back to main thread to get player names
+                // Switch back to main thread to process results
                 Server.NextFrame(() =>
                 {
-                    foreach (var (steamId, option, wins, losses) in dbResults)
+                    foreach (var (steamId, storedName, option, wins, losses) in dbResults)
                     {
-                        // Try to get player name from current online players (safe on main thread)
-                        string playerName = "Unknown Player";
+                        // Use stored name from database, but try to get updated name from online players if available
+                        string playerName = storedName;
                         var onlinePlayer = Utilities.GetPlayers().FirstOrDefault(p => 
                             p != null && p.IsValid && p.AuthorizedSteamID?.SteamId64 == steamId);
 
@@ -235,9 +268,9 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                         {
                             playerName = onlinePlayer.PlayerName;
                         }
-                        else
+                        else if (string.IsNullOrEmpty(storedName))
                         {
-                            playerName = $"Player [{steamId}]";
+                            playerName = $"[{steamId}]";
                         }
 
                         var playerSettings = new PlayerSettings

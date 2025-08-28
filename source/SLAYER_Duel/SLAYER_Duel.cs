@@ -73,7 +73,7 @@ public class DuelModeSettings
 public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 {
     public override string ModuleName => "SLAYER_Duel";
-    public override string ModuleVersion => "2.0";
+    public override string ModuleVersion => "2.1";
     public override string ModuleAuthor => "SLAYER";
     public override string ModuleDescription => "1vs1 Duel at the end of the round with different weapons";
     public required SLAYER_DuelConfig Config {get; set;}
@@ -126,7 +126,15 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     {
         PlayerBeaconTimer?.Clear();
         //PlayerRescuingHostage?.Clear();
-        _connection = new SqliteConnection($"Data Source={Path.Join(ModuleDirectory, "Database/SLAYER_Duel.db")}");
+        
+        // Ensure Database directory exists
+        var databasePath = Path.Join(ModuleDirectory, "Database");
+        Directory.CreateDirectory(databasePath);
+        
+        var databaseFile = Path.Join(databasePath, "SLAYER_Duel.db");
+        Console.WriteLine($"[SLAYER_Duel] Database path: {databaseFile}");
+        
+        _connection = new SqliteConnection($"Data Source={databaseFile}");
         _connection.Open();
         if(hotReload)
         {
@@ -137,7 +145,17 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         }
         Task.Run(async () =>
         {
-            await _connection.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS `SLAYER_Duel` (`steamid` UNSIGNED BIG INT NOT NULL,`option` INT NOT NULL DEFAULT -1,`wins` INT NOT NULL DEFAULT 0,`losses` INT NOT NULL DEFAULT 0, PRIMARY KEY (`steamid`));");
+            await _connection.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS `SLAYER_Duel` (`steamid` UNSIGNED BIG INT NOT NULL,`name` TEXT NOT NULL DEFAULT '',`option` INT NOT NULL DEFAULT -1,`wins` INT NOT NULL DEFAULT 0,`losses` INT NOT NULL DEFAULT 0, PRIMARY KEY (`steamid`));");
+            
+            // Migration: Add name column to existing databases
+            try
+            {
+                await _connection.ExecuteAsync(@"ALTER TABLE `SLAYER_Duel` ADD COLUMN `name` TEXT NOT NULL DEFAULT '';");
+            }
+            catch
+            {
+                // Column already exists, ignore the error
+            }
         });
         LoadPositionsFromFile();
         RegisterListener<Listeners.OnMapStart>((mapname) =>
@@ -488,30 +506,43 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             return HookResult.Continue;
         }, HookMode.Post);
     }
+    public override void Unload(bool hotReload)
+    {
+        // Properly dispose of database connection
+        try
+        {
+            _connection?.Close();
+            _connection?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SLAYER_Duel] Error closing database connection: {ex.Message}");
+        }
+    }
     
     private void AcceptDuelVoteOption(CCSPlayerController player, ChatMenuOption? option)
     {
-        if (player == null || !player.IsValid || player.IsBot || !g_IsDuelPossible || g_BombPlanted || !g_IsVoteStarted || !Duelist.Contains(player))return;
-        
-        if(player.TeamNum == 2)
+        if (player == null || !player.IsValid || player.IsBot || !g_IsDuelPossible || g_BombPlanted || !g_IsVoteStarted || !Duelist.Contains(player)) return;
+
+        if (player.TeamNum == 2)
         {
-            if(Config.Duel_FreezePlayerOnMenuShown)UnFreezePlayer(player);
+            if (Config.Duel_FreezePlayerOnMenuShown) UnFreezePlayer(player);
             PlayersDuelVoteOption[0] = true;
             Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.T", player.PlayerName]}");
         }
-        else if(player.TeamNum == 3)
+        else if (player.TeamNum == 3)
         {
-            if(Config.Duel_FreezePlayerOnMenuShown)UnFreezePlayer(player);
+            if (Config.Duel_FreezePlayerOnMenuShown) UnFreezePlayer(player);
             PlayersDuelVoteOption[1] = true;
             Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.CT", player.PlayerName]}");
         }
 
-        if(PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1])
+        if (PlayersDuelVoteOption[0] && PlayersDuelVoteOption[1])
         {
             g_IsVoteStarted = false; // Both Accepted the Duel Vote, So no need to Exit Menu at Round End
             Server.PrintToChatAll($"{Localizer["Chat.Prefix"]} {Localizer["Chat.AcceptedDuel.Both"]}");
             RemoveObjectives(); // Remove Objectives from Map
-            AddTimer(0.1f, ()=> PrepDuel());
+            AddTimer(0.1f, () => PrepDuel());
         }
     }
     private void DeclineDuelVoteOption(CCSPlayerController player, ChatMenuOption? option)

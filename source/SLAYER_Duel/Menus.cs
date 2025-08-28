@@ -78,7 +78,6 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
                     double winRate = totalPlayed > 0 ? (double)playerSettings.Wins / totalPlayed * 100 : 0;
                     p.PrintToChat($" {ChatColors.DarkRed}---------------{Localizer["Chat.DuelStats"]}{ChatColors.DarkRed}---------------");
                     p.PrintToChat($" {ChatColors.Gold}Name: {ChatColors.Lime}{playerSettings.PlayerName}");
-                    p.PrintToChat($" {ChatColors.Gold}Rank: {ChatColors.Lime}#{rank}");
                     p.PrintToChat($" {ChatColors.Gold}Played: {ChatColors.Lime}{totalPlayed}");
                     p.PrintToChat($" {ChatColors.Gold}Wins: {ChatColors.Lime}{playerSettings.Wins}");
                     p.PrintToChat($" {ChatColors.Gold}Losses: {ChatColors.Lime}{playerSettings.Losses}");
@@ -109,14 +108,14 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
         var settingsMenu = manager.CreateMenu($"<font color='lime'>{Localizer["PlayerMenu.Title"]}</font>", false, true, true, true);
 
         // Show current vote option
-        var currentOption = settingsMenu.AddOption($"<font color='yellow'>Selected:</font> {SelectedOption}", (p, option) =>{}, true);
+        var currentOption = settingsMenu.AddOption($"<font color='yellow'>{Localizer["PlayerMenu.Selected"]}</font>: {SelectedOption}", (p, option) =>{}, true);
         // Ask for vote
         settingsMenu.AddOption($"<font color='yellow'>{Localizer["PlayerMenu.Vote"]}</font>", (p, option) =>
         {
             if(PlayerOption?.ContainsKey(player) == true) PlayerOption[player].Option = -1;
             SetPlayerDuelOption(player, -1);
             player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Vote"]}");
-            currentOption.Value.OptionDisplay = $"<font color='yellow'>Selected:</font> <font color='gold'>{Localizer["PlayerMenu.Vote"]}</font>";
+            currentOption.Value.OptionDisplay = $"<font color='yellow'>{Localizer["PlayerMenu.Selected"]}</font> <font color='gold'>{Localizer["PlayerMenu.Vote"]}</font>";
             manager!.Refresh();
         });
         // always Accept
@@ -125,7 +124,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(PlayerOption?.ContainsKey(player) == true) PlayerOption[player].Option = 1;
             SetPlayerDuelOption(player, 1);
             player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Accept"]}");
-            currentOption.Value.OptionDisplay = $"<font color='yellow'>Selected:</font> <font color='lime'>{Localizer["PlayerMenu.Accept"]}</font>";
+            currentOption.Value.OptionDisplay = $"<font color='yellow'>{Localizer["PlayerMenu.Selected"]}</font> <font color='lime'>{Localizer["PlayerMenu.Accept"]}</font>";
             manager!.Refresh();
         });
 
@@ -135,7 +134,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
             if(PlayerOption?.ContainsKey(player) == true) PlayerOption[player].Option = 0;
             SetPlayerDuelOption(player, 0);
             player.PrintToChat($"{Localizer["Chat.Prefix"]}  {Localizer["Chat.DuelSettings.Decline"]}");
-            currentOption.Value.OptionDisplay = $"<font color='yellow'>Selected:</font> <font color='red'>{Localizer["PlayerMenu.Decline"]}</font>";
+            currentOption.Value.OptionDisplay = $"<font color='yellow'>{Localizer["PlayerMenu.Selected"]}</font> <font color='red'>{Localizer["PlayerMenu.Decline"]}</font>";
             manager!.Refresh();
         });
         manager!.OpenSubMenu(player, settingsMenu);

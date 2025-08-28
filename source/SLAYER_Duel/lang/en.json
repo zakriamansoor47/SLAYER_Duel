@@ -30,6 +30,7 @@
     "PlayerMenu.Accept":                        "Always accept Duel",
     "PlayerMenu.Decline":                       "Always decline Duel",
     "PlayerMenu.Vote":                          "Always ask for Vote",
+    "PlayerMenu.Selected":                      "Selected:",
     "MenuSettings.Title":                       "[★ SLAYER Duel Settings ★]",
     "MenuSettings.TeleportSetT":                "Set Terrorist Teleport Point",
     "MenuSettings.TeleportSetCT":               "Set C-Terrorist Teleport Point",
