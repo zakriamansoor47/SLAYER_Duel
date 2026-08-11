@@ -35,7 +35,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
     [ConsoleCommand("duel", "Open Chat Menu of Player Duel Settings")]
 	public void PlayerDuelSettings(CCSPlayerController? player, CommandInfo command)
 	{
-        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected)return;
+        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.Connected)return;
 
         PlayerDuelSettingsMenu(player);
     }
@@ -44,7 +44,7 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 	[RequiresPermissions("@css/root")]
 	public void DuelSettings(CCSPlayerController? player, CommandInfo command)
 	{
-        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.PlayerConnected)
+        if (!Config.PluginEnabled || player == null || !player.IsValid || player.Connected != PlayerConnectedState.Connected)
 		{
 			return;
 		}

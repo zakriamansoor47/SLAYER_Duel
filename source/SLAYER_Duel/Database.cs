@@ -18,7 +18,9 @@ public partial class SLAYER_Duel : BasePlugin, IPluginConfig<SLAYER_DuelConfig>
 
     private void LoadPlayerSettings(CCSPlayerController player)
     {
+        if (player == null || !player.IsValid || player.AuthorizedSteamID == null) return;
         var steamId = player.AuthorizedSteamID?.SteamId64;
+        if (steamId == null) return;
         if (PlayerOption == null) PlayerOption = new Dictionary<CCSPlayerController, PlayerSettings>();
         if (PlayerOption?.ContainsKey(player) == false) PlayerOption[player] = new PlayerSettings();
         PlayerOption![player].PlayerName = player.PlayerName;

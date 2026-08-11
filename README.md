@@ -8,7 +8,7 @@
 This Plugin allows Players to do **1vs1 Duel**. This plugin has many features. The main feature is that you can your own **Custom Duel Mode** from **JSON** file Easily.
 
 ## Required:
-**[T3Menu](https://github.com/T3Marius/T3Menu-API)** - To Use WASD Menu
+**[T3Menu-API (Forked by ME for latest cssharp version support)](https://github.com/zakriamansoor47/T3Menu-API)** - To Use WASD Menu
 
 ## Installation:
 **1.** Upload files to your server.
